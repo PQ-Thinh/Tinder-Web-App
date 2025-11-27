@@ -2,7 +2,8 @@
 import { useAuth } from "@/contexts/auth-context";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
+import gsap from "gsap";
 
 function AuthPage() {
     const [isSignUp, setIsSignUp] = useState<boolean>(false);
@@ -72,7 +73,9 @@ function AuthPage() {
         }
 
     }
-
+    if (loading) {
+        return <LoadingSpinner />;
+    }
     return (
         <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-pink-100 to-red-100 dark:from-gray-900 dark:to-gray-800">
             <div className="max-w-md w-full space-y-8">
@@ -234,3 +237,27 @@ function AuthPage() {
 };
 
 export default AuthPage;
+
+export function LoadingSpinner() {
+    const spinnerRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        if (spinnerRef.current) {
+            gsap.to(spinnerRef.current, {
+                rotation: 360,
+                repeat: -1,
+                ease: "linear",
+                duration: 1,
+            });
+        }
+    }, []);
+
+    return (
+        <div className="flex items-center justify-center h-screen bg-gradient-to-br from-pink-100 to-red-100 dark:from-gray-900 dark:to-gray-800">
+            <div
+                ref={spinnerRef}
+                className="w-12 h-12 border-4 border-pink-500 border-t-transparent rounded-full"
+            ></div>
+        </div>
+    );
+};
