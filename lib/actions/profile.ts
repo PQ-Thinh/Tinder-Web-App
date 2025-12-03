@@ -17,7 +17,7 @@ interface UserHobbyJoin {
 }
 
 export interface UserProfile {
-    id?: string;
+    id: string;
     full_name?: string;
     username?: string;
     bio?: string;
