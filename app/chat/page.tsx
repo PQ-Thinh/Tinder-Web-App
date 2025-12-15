@@ -96,7 +96,7 @@ export default function ChatPage() {
             Tin nhắn
           </h1>
           <p className="text-gray-600 dark:text-gray-400">
-            {chats.length} cuộc trò chuyện{chats.length !== 1 ? "s" : ""}
+            {chats.length} cuộc trò chuyện{chats.length !== 1 ? "" : ""}
           </p>
         </header>
 
