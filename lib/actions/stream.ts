@@ -125,3 +125,74 @@ export async function createOrGetChannel(otherUserId: string) {
     channelId,
   };
 }
+
+// SỬA DUY NHẤT CHỖ NÀY ĐỂ CALLID NGẮN < 64 KÝ TỰ
+export async function createVideoCall(otherUserId: string) {
+  const supabase = await createClient();
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return { success: false, error: "User not authenticated" };
+  }
+
+  const { data: matches, error: matchError } = await supabase
+    .from("matches")
+    .select("*")
+    .or(
+      `and(user1_id.eq.${user.id},user2_id.eq.${otherUserId}),and(user1_id.eq.${otherUserId},user2_id.eq.${user.id})`
+    )
+    .eq("is_active", true)
+    .single();
+
+  if (matchError || !matches) {
+    throw new Error("Users are not matched. Cannot create chat channel.");
+  }
+
+  const sortedIds = [user.id, otherUserId].sort();
+  // Lấy 10 ký tự đầu mỗi id → callId ngắn, an toàn < 64 ký tự
+  const shortId1 = sortedIds[0].slice(0, 10);
+  const shortId2 = sortedIds[1].slice(0, 10);
+  const callId = `call_${shortId1}_${shortId2}`;
+
+  return { callId, callType: "default" };
+}
+
+export async function getStreamVideoToken() {
+  const supabase = await createClient();
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return { success: false, error: "User not authenticated" };
+  }
+
+  const { data: userData, error: userError } = await supabase
+    .from("users")
+    .select("full_name, avatar_url")
+    .eq("id", user.id)
+    .single();
+
+  if (userError) {
+    console.error("Error fetching user data:", userError);
+    throw new Error("Failed to fetch user data");
+  }
+
+  const serverClient = StreamChat.getInstance(
+    process.env.NEXT_PUBLIC_STREAM_API_KEY!,
+    process.env.STREAM_API_SECRET!
+  );
+
+  const token = serverClient.createToken(user.id);
+
+  return {
+    token,
+    userId: user.id,
+    userName: userData.full_name,
+    userImage: userData.avatar_url || undefined,
+  };
+}
