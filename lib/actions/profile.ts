@@ -32,6 +32,7 @@ export interface UserProfile {
     longitude?: number | null;
     hobbiesIds?: string[]; // Danh sách ID để Frontend dùng cho Form
     hobbies?: Hobby[];     // Danh sách Object đầy đủ để hiển thị (nếu cần)
+    created_at: string;
 }
 
 // Payload để update bảng users
