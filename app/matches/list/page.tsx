@@ -1,6 +1,6 @@
 "use client";
 
-import { UserProfile } from "@/lib/actions/profile"; // Import type chuẩn
+import { UserProfile } from "@/lib/actions/profile";
 import { getUserMatches } from "@/lib/actions/matches";
 import { useEffect, useState } from "react";
 import Link from "next/link";
@@ -27,6 +27,18 @@ export default function MatchesListPage() {
 
         loadMatches();
     }, []);
+
+    // Helper: Format thời gian hoạt động gần nhất
+    const formatLastActive = (dateString?: string) => {
+        if (!dateString) return "";
+        const date = new Date(dateString);
+        const now = new Date();
+        const diffInMinutes = Math.floor((now.getTime() - date.getTime()) / 60000);
+
+        if (diffInMinutes < 60) return `${diffInMinutes} phút trước`;
+        if (diffInMinutes < 1440) return `${Math.floor(diffInMinutes / 60)} giờ trước`;
+        return `${Math.floor(diffInMinutes / 1440)} ngày trước`;
+    };
 
     if (loading) {
         return (
@@ -65,7 +77,7 @@ export default function MatchesListPage() {
                             Hãy bắt đầu quẹt phải để tìm {'"nửa kia"'} của bạn!
                         </p>
                         <Link
-                            href="/matches" // Hoặc trang chủ /home nơi có thẻ quẹt
+                            href="/"
                             className="inline-block bg-gradient-to-r from-pink-500 to-red-500 text-white font-semibold py-3 px-8 rounded-full hover:from-pink-600 hover:to-red-600 transition-all duration-200 shadow-md hover:shadow-lg transform hover:-translate-y-1"
                         >
                             Bắt đầu khám phá
@@ -76,7 +88,7 @@ export default function MatchesListPage() {
                         <div className="grid gap-4">
                             {matches.map((match) => (
                                 <Link
-                                    key={match.id} // Dùng ID làm key thay vì index
+                                    key={match.id}
                                     href={`/chat/${match.id}`}
                                     className="group block bg-white dark:bg-gray-800 rounded-2xl p-4 sm:p-6 shadow-md hover:shadow-xl transition-all duration-200 border border-transparent hover:border-pink-200 dark:hover:border-pink-900"
                                 >
@@ -84,7 +96,7 @@ export default function MatchesListPage() {
                                         {/* Avatar */}
                                         <div className="relative w-16 h-16 sm:w-20 sm:h-20 rounded-full overflow-hidden flex-shrink-0 border-2 border-gray-100 dark:border-gray-700">
                                             <img
-                                                src={match.avatar_url || "/default-avatar.png"} // Fallback ảnh mặc định
+                                                src={match.avatar_url || "/default-avatar.png"}
                                                 alt={match.full_name || "User"}
                                                 className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
                                             />
@@ -96,11 +108,25 @@ export default function MatchesListPage() {
                                                 <h3 className="text-lg font-bold text-gray-900 dark:text-white truncate">
                                                     {match.full_name}, {match.birthdate ? calculateAge(match.birthdate) : "??"} tuổi
                                                 </h3>
-                                                {/* Online Status Indicator (Optional - Giả lập) */}
-                                                <div className="flex-shrink-0 w-2.5 h-2.5 bg-green-500 rounded-full shadow-[0_0_8px_rgba(34,197,94,0.6)]"></div>
+
+                                                {/* --- TRẠNG THÁI ONLINE THẬT --- */}
+                                                <div className="flex items-center space-x-2">
+                                                    {match.is_online ? (
+                                                        <div className="flex items-center" title="Đang online">
+                                                            <span className="flex-shrink-0 w-2.5 h-2.5 bg-green-500 rounded-full shadow-[0_0_8px_rgba(34,197,94,0.6)] animate-pulse"></span>
+                                                        </div>
+                                                    ) : (
+                                                        // Tùy chọn: Hiển thị thời gian hoạt động gần nhất nếu offline
+                                                        match.last_active && (
+                                                            <span className="text-[10px] text-gray-400 font-medium">
+                                                                {formatLastActive(match.last_active)}
+                                                            </span>
+                                                        )
+                                                    )}
+                                                </div>
                                             </div>
 
-                                            {/* Display Address (New) */}
+                                            {/* Display Address */}
                                             {match.display_address && (
                                                 <div className="flex items-center text-xs text-gray-500 dark:text-gray-400 mb-1.5">
                                                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3 h-3 mr-1">
@@ -115,7 +141,7 @@ export default function MatchesListPage() {
                                                 {match.bio || "Chưa có giới thiệu..."}
                                             </p>
 
-                                            {/* Hobbies Preview (New) */}
+                                            {/* Hobbies Preview */}
                                             {match.hobbies && match.hobbies.length > 0 && (
                                                 <div className="flex flex-wrap gap-1">
                                                     {match.hobbies.slice(0, 3).map((hobby, idx) => (
