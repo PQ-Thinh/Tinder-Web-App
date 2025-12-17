@@ -6,10 +6,12 @@ import { useRouter } from "next/navigation";
 
 interface ChatHeaderProps {
   user: UserProfile;
+  onVideoCall?: () => void;
 }
-export default function ChatHeader({ user }: ChatHeaderProps) {
+
+export default function ChatHeader({ user, onVideoCall }: ChatHeaderProps) {
   const router = useRouter();
-  const defaultAvatarUrl = "default-avatar.png";
+
   return (
     <div className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-6 py-4">
       <div className="flex items-center justify-between">
@@ -36,7 +38,7 @@ export default function ChatHeader({ user }: ChatHeaderProps) {
           <div className="flex items-center space-x-3">
             <div className="relative w-12 h-12 rounded-full overflow-hidden">
               <img
-                src={user.avatar_url || defaultAvatarUrl}
+                src={user.avatar_url || "/default-avatar.png"}
                 alt={user.full_name}
                 className="w-full h-full object-cover"
               />
@@ -52,6 +54,28 @@ export default function ChatHeader({ user }: ChatHeaderProps) {
               </p>
             </div>
           </div>
+        </div>
+
+        <div className="flex items-center space-x-2">
+          <button
+            onClick={onVideoCall}
+            className="p-4 rounded-full bg-gradient-to-r from-blue-500 to-purple-500 text-white hover:from-blue-600 hover:to-purple-600 transition-all duration-300 shadow-lg hover:shadow-xl hover:scale-110"
+            title="Bắt đầu Video Call"
+          >
+            <svg
+              className="w-7 h-7"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"
+              />
+            </svg>
+          </button>
         </div>
       </div>
     </div>
