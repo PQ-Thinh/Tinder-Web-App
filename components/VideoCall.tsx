@@ -139,11 +139,11 @@ export default function VideoCall({
             {/* SỬA ĐỔI: Sử dụng PaginatedGridLayout thay vì SpeakerLayout 
                groupSize={2} để tối ưu cho cuộc gọi 2 người
             */}
-            <PaginatedGridLayout 
+            <PaginatedGridLayout
               groupSize={2}
-              pageButtons={false} // Ẩn nút chuyển trang vì chỉ có 2 người
+            // pageButtons={false} // Ẩn nút chuyển trang vì chỉ có 2 người
             />
-            
+
             <div className="absolute bottom-8 left-0 right-0 flex justify-center z-10">
               <CallControls onLeave={onCallEnd} />
             </div>

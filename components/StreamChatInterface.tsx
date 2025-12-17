@@ -14,15 +14,27 @@ import {
   useRef,
   useState,
 } from "react";
-import { Channel, Event, StreamChat } from "stream-chat";
+import { Channel, Event, StreamChat, MessageResponse } from "stream-chat"; // Import MessageResponse
 import VideoCall from "./VideoCall";
 
+// --- 1. ĐỊNH NGHĨA CÁC INTERFACE ---
+
+// Interface cho tin nhắn hiển thị ở Client
 interface Message {
   id: string;
   text: string;
   sender: "me" | "other";
   timestamp: Date;
   user_id: string;
+}
+
+// Interface cho dữ liệu cuộc gọi đính kèm trong tin nhắn
+// Kế thừa Record<string, unknown> để tương thích với kiểu dữ liệu của StreamChat
+interface VideoCallCustomData extends Record<string, unknown> {
+  call_id?: string;
+  caller_id?: string;
+  caller_name?: string;
+  text?: string;
 }
 
 export default function StreamChatInterface({
@@ -138,11 +150,14 @@ export default function StreamChatInterface({
           if (event.message) {
             // Check tin nhắn mời gọi video
             if (event.message.text?.includes(`📹 Video call invitation`)) {
-              const customData = event.message as any;
+
+              // --- THAY THẾ ANY ---
+              // Ép kiểu an toàn sang interface VideoCallCustomData
+              const customData = event.message as unknown as VideoCallCustomData;
 
               // Chỉ hiện thông báo cho người nhận (ID khác người gửi)
               if (customData.caller_id && customData.caller_id !== userId) {
-                setIncomingCallId(customData.call_id);
+                setIncomingCallId(customData.call_id || "");
                 setCallerName(customData.caller_name || "Someone");
                 setIncomingCall(true);
               }
@@ -185,7 +200,6 @@ export default function StreamChatInterface({
         setClient(chatClient);
         setChannel(chatChannel);
       } catch (error) {
-        // router.push("/chat"); // Có thể comment lại để debug nếu lỗi
         console.error(error);
       } finally {
         setLoading(false);
@@ -211,15 +225,18 @@ export default function StreamChatInterface({
       setIsCallInitiator(true);
 
       if (channel) {
-        // Gửi tin nhắn kèm custom data (call_id, caller_id)
-        const messageData = {
+        // --- THAY THẾ ANY ---
+        // Tạo object đúng kiểu VideoCallCustomData
+        const messageData: VideoCallCustomData = {
           text: `📹 Video call invitation`,
           call_id: callId,
           caller_id: currentUserId,
           caller_name: otherUser.full_name || "Someone",
         };
 
-        await channel.sendMessage(messageData);
+        // Stream Chat sendMessage chấp nhận Record<string, unknown> cho custom fields
+        // Chúng ta ép kiểu về Record<string, unknown> để TypeScript không báo lỗi thiếu các trường mặc định của Message
+        await channel.sendMessage(messageData as unknown as Record<string, unknown>);
       }
     } catch (error) {
       console.error(error);
@@ -279,17 +296,14 @@ export default function StreamChatInterface({
   }
 
   function handleAcceptCall() {
-    // Set ID cuộc gọi từ tin nhắn nhận được
     setVideoCallId(incomingCallId);
-    setShowVideoCall(true); // Mở component VideoCall
+    setShowVideoCall(true);
 
-    // Reset overlay
     setIncomingCall(false);
     setIncomingCallId("");
     setCallerName("");
-    setIsCallInitiator(false); // Đánh dấu là người nhận
+    setIsCallInitiator(false);
 
-    // Gọi prop callback nếu cần xử lý ở parent
     onCallStart?.(incomingCallId);
   }
 
@@ -303,7 +317,6 @@ export default function StreamChatInterface({
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-pink-500 mx-auto"></div>
           <p className="mt-4 text-gray-600 dark:text-gray-400">
-            {/* Sửa: Setting up chat... */}
             Đang thiết lập trò chuyện...
           </p>
         </div>
@@ -321,24 +334,21 @@ export default function StreamChatInterface({
         {messages.map((message) => (
           <div
             key={message.id}
-            className={`flex ${
-              message.sender === "me" ? "justify-end" : "justify-start"
-            }`}
+            className={`flex ${message.sender === "me" ? "justify-end" : "justify-start"
+              }`}
           >
             <div
-              className={`max-w-xs lg:max-w-md px-4 py-2 rounded-2xl ${
-                message.sender === "me"
+              className={`max-w-xs lg:max-w-md px-4 py-2 rounded-2xl ${message.sender === "me"
                   ? "bg-gradient-to-r from-pink-500 to-red-500 text-white"
                   : "bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-white"
-              }`}
+                }`}
             >
               <p className="text-sm">{message.text}</p>
               <p
-                className={`text-xs mt-1 ${
-                  message.sender === "me"
+                className={`text-xs mt-1 ${message.sender === "me"
                     ? "text-pink-100"
                     : "text-gray-500 dark:text-gray-400"
-                }`}
+                  }`}
               >
                 {formatTime(message.timestamp)}
               </p>
@@ -408,7 +418,6 @@ export default function StreamChatInterface({
                 channel.keystroke();
               }
             }}
-            // Sửa: Type a message...
             placeholder="Nhập tin nhắn..."
             className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-full focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent dark:bg-gray-800 dark:text-white"
             disabled={!channel}
@@ -442,17 +451,15 @@ export default function StreamChatInterface({
             <div className="text-center">
               <div className="w-20 h-20 rounded-full overflow-hidden mx-auto mb-4 border-4 border-pink-500">
                 <img
-                  src={otherUser.avatar_url}
+                  src={otherUser.avatar_url || "default-avartar.png"}
                   alt={otherUser.full_name}
                   className="w-full h-full object-cover"
                 />
               </div>
               <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
-                
                 Cuộc gọi Video đến
               </h3>
               <p className="text-gray-600 dark:text-gray-400 mb-6">
-                
                 {callerName} đang gọi cho bạn
               </p>
               <div className="flex space-x-4">
@@ -460,7 +467,6 @@ export default function StreamChatInterface({
                   onClick={handleDeclineCall}
                   className="flex-1 bg-red-500 text-white py-3 px-6 rounded-full font-semibold hover:bg-red-600 transition-colors duration-200"
                 >
-                 
                   Từ chối
                 </button>
                 <button
