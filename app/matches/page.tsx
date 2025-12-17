@@ -282,127 +282,140 @@ export default function MatchesPage() {
         height: "100vh",
         width: "100%",
         display: "flex",
-        flexDirection: "column",
-        justifyContent: "center",
-        alignItems: "center",
+        flexDirection: "row", // Xếp hàng ngang
+        justifyContent: "center", // Căn giữa toàn bộ cụm
+        alignItems: "flex-start",
+        pt: { lg: "calc((100vh - 650px) / 2)" },
+        gap: { lg: 8, xl: 12 },
         overflow: "hidden",
         position: "relative",
-        background:
-          "linear-gradient(to bottom, rgba(255,255,255,0.8), rgba(255,255,255,0.95))",
+        background: "linear-gradient(135deg, #FFDEE9 0%, #B5FFFC 100%)",
+        px: 4,
       }}
     >
-      {/* Card Wrapper & Stack */}
+      {/* --- KHỐI TRÁI: SWIPING CARD --- */}
       <Box
         sx={{
-          position: "relative",
-          width: { xs: "90vw", sm: 400 },
-          height: { xs: "70vh", sm: 600 }, // Điều chỉnh chiều cao cho khớp với MatchCard
-          zIndex: 10,
           display: "flex",
-          justifyContent: "center",
+          flexDirection: "column",
           alignItems: "center",
+          zIndex: 10,
         }}
       >
-        {/* THAY ĐỔI CHÍNH TẠI ĐÂY:
-                   Wrapper này đóng vai trò là "Draggable Target" cho GSAP. 
-                   Ref được gắn vào đây thay vì gắn vào component con.
-                */}
+        {/* Card Wrapper & Stack */}
         <Box
-          ref={cardRef}
           sx={{
-            position: "absolute",
-            width: "100%",
-            height: "100%",
-            cursor: "grab",
-            touchAction: "none",
-            "&:active": { cursor: "grabbing" },
+            position: "relative", width: 380, height: 550
           }}
         >
-          {/* Component Card của bạn */}
-          <MatchCard user={currentPotentialMatch} />
-
-          {/* Overlays (Like/Nope) nằm đè lên Card và di chuyển cùng Card */}
           <Box
-            ref={likeOverlayRef}
+            ref={cardRef}
             sx={{
               position: "absolute",
-              top: 40,
-              left: 40,
-              border: "4px solid #4CAF50",
-              borderRadius: 2,
-              padding: "4px 12px",
-              transform: "rotate(-15deg)",
-              opacity: 0,
-              pointerEvents: "none",
-              zIndex: 20,
-            }}
-          >
-            <Typography
-              variant="h4"
-              fontWeight={900}
-              color="#4CAF50"
-              sx={{ textTransform: "uppercase", letterSpacing: 2 }}
-            >
-              LIKE
-            </Typography>
-          </Box>
-
-          <Box
-            ref={nopeOverlayRef}
-            sx={{
-              position: "absolute",
-              top: 40,
-              right: 40,
-              border: "4px solid #F44336",
-              borderRadius: 2,
-              padding: "4px 12px",
-              transform: "rotate(15deg)",
-              opacity: 0,
-              pointerEvents: "none",
-              zIndex: 20,
-            }}
-          >
-            <Typography
-              variant="h4"
-              fontWeight={900}
-              color="#F44336"
-              sx={{ textTransform: "uppercase", letterSpacing: 2 }}
-            >
-              NOPE
-            </Typography>
-          </Box>
-        </Box>
-
-        {/* Card ảo phía sau (Stack Effect) */}
-        {currentIndex + 1 < potentialMatches.length && (
-          <Box
-            sx={{
-              position: "absolute",
-              top: 0,
               width: "100%",
               height: "100%",
-              borderRadius: "24px",
-              zIndex: -1,
-              transform: "scale(0.95) translateY(10px)",
-              opacity: 0.8,
-              bgcolor: "grey.300",
-              pointerEvents: "none",
+              cursor: "grab",
+              touchAction: "none",
+              "&:active": { cursor: "grabbing" },
             }}
+          >
+            <MatchCard user={currentPotentialMatch} />
+
+            {/* Overlays (Like/Nope) */}
+            <Box
+              ref={likeOverlayRef}
+              sx={{
+                position: "absolute",
+                top: 40,
+                left: 40,
+                border: "4px solid #4CAF50",
+                borderRadius: 2,
+                padding: "4px 12px",
+                transform: "rotate(-15deg)",
+                opacity: 0,
+                pointerEvents: "none",
+                zIndex: 20,
+              }}
+            >
+              <Typography variant="h4" fontWeight={900} color="#4CAF50">
+                LIKE
+              </Typography>
+            </Box>
+
+            <Box
+              ref={nopeOverlayRef}
+              sx={{
+                position: "absolute",
+                top: 40,
+                right: 40,
+                border: "4px solid #F44336",
+                borderRadius: 2,
+                padding: "4px 12px",
+                transform: "rotate(15deg)",
+                opacity: 0,
+                pointerEvents: "none",
+                zIndex: 20,
+              }}
+            >
+              <Typography variant="h4" fontWeight={900} color="#F44336">
+                NOPE
+              </Typography>
+            </Box>
+          </Box>
+
+          {/* Card ảo phía sau (Stack Effect) */}
+          {currentIndex + 1 < potentialMatches.length && (
+            <Box
+              sx={{
+                position: "absolute",
+                width: "100%",
+                height: "100%",
+                borderRadius: "24px",
+                zIndex: -1,
+                transform: "scale(0.95) translateY(10px)",
+                opacity: 0.8,
+                bgcolor: "grey.300",
+                pointerEvents: "none",
+              }}
+            />
+          )}
+        </Box>
+
+        {/* Footer Controls */}
+        <Box sx={{ mt: 5 }}>
+          <MatchButtons
+            onLike={onLikeClick}
+            onPass={onPassClick}
+            disabled={loading}
           />
-        )}
+        </Box>
       </Box>
 
-      {/* --- Footer Controls --- */}
-      {/* THAY ĐỔI CHÍNH: Thay thế Stack/Fab bằng MatchButtons */}
-      <Box sx={{ mt: 4, zIndex: 20 }}>
-        <MatchButtons
-          onLike={onLikeClick}
-          onPass={onPassClick}
-          disabled={loading}
-        />
+      {/* --- KHỐI PHẢI: LEADERBOARD (Chỉ hiện trên màn hình lớn) --- */}
+      <Box
+        sx={{
+          display: { xs: "none", lg: "block" },
+          zIndex: 10,
+        }}
+      >
+        <Box
+          sx={{
+            width: 500, // Điều chỉnh lại chiều rộng cho cân đối
+            height: 550, // Cao hơn card một chút để nhìn thanh thoát
+            bgcolor: "rgba(255, 255, 255, 0.4)",
+            backdropFilter: "blur(20px)",
+            borderRadius: "28px",
+            border: "1px solid rgba(255, 255, 255, 0.6)",
+            boxShadow: "0 15px 35px rgba(0,0,0,0.05)",
+            display: "flex",
+            flexDirection: "column" ,
+            overflow: "hidden", // Để Leaderboard không tràn ra ngoài border-radius
+            p: 1,
+          }}
+        >
+          <Leaderboard />
+        </Box>
       </Box>
-
-      
 
       {/* Match Popup */}
       {showMatchNotification && matchedUser && (
