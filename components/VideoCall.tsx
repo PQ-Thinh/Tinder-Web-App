@@ -3,13 +3,15 @@
 import { useEffect, useState } from "react";
 import {
   Call,
-  CallControls,
-  PaginatedGridLayout, // <-- Thay đổi: Import Grid Layout
+  // Thay đổi: Import các nút riêng lẻ thay vì CallControls
+  ToggleAudioPublishingButton,
+  ToggleVideoPublishingButton,
+  CancelCallButton,
+  PaginatedGridLayout,
   StreamCall,
   StreamTheme,
   StreamVideo,
   StreamVideoClient,
-  SpeakerLayout, // Có thể giữ lại nếu muốn switch layout, nhưng ở dưới ta dùng Grid
 } from "@stream-io/video-react-sdk";
 
 import "@stream-io/video-react-sdk/dist/css/styles.css";
@@ -40,8 +42,6 @@ export default function VideoCall({
 
       try {
         setError(null);
-        // setLoading(true); // Có thể bật lại nếu muốn hiện loading mỗi lần
-
         const { token, userId, userName, userImage } = await getStreamVideoToken();
 
         if (!isMounted) return;
@@ -60,10 +60,8 @@ export default function VideoCall({
 
         const videoCall = videoClient.call("default", callId);
 
-        // Luôn dùng create: true để đảm bảo call tồn tại
         await videoCall.join({ create: true });
 
-        // Tự động bật cam/mic
         try {
           await videoCall.camera.enable();
           await videoCall.microphone.enable();
@@ -136,16 +134,26 @@ export default function VideoCall({
       <StreamVideo client={client}>
         <StreamCall call={call}>
           <StreamTheme>
-            {/* SỬA ĐỔI: Sử dụng PaginatedGridLayout thay vì SpeakerLayout 
-               groupSize={2} để tối ưu cho cuộc gọi 2 người
-            */}
-            <PaginatedGridLayout
-              groupSize={2}
-            // pageButtons={false} // Ẩn nút chuyển trang vì chỉ có 2 người
-            />
+            <PaginatedGridLayout groupSize={2} />
 
-            <div className="absolute bottom-8 left-0 right-0 flex justify-center z-10">
-              <CallControls onLeave={onCallEnd} />
+            {/* PHẦN SỬA ĐỔI: Thay thế CallControls bằng bộ nút tùy chỉnh */}
+            <div className="absolute bottom-10 left-0 right-0 flex justify-center z-10">
+              <div className="bg-black/40 backdrop-blur-md p-4 rounded-full flex items-center gap-6 border border-white/10 shadow-2xl">
+                {/* Nút bật/tắt Micro */}
+                <div className="hover:scale-110 transition-transform">
+                  <ToggleAudioPublishingButton />
+                </div>
+                
+                {/* Nút Kết thúc cuộc gọi - Được làm nổi bật hơn */}
+                <div className="scale-125 mx-2 hover:scale-135 transition-transform">
+                  <CancelCallButton onClick={onCallEnd} />
+                </div>
+
+                {/* Nút bật/tắt Camera */}
+                <div className="hover:scale-110 transition-transform">
+                  <ToggleVideoPublishingButton />
+                </div>
+              </div>
             </div>
           </StreamTheme>
         </StreamCall>

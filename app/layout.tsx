@@ -3,6 +3,7 @@ import { Be_Vietnam_Pro } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/contexts/auth-context";
 import Navbar from "@/components/Navbar";
+import GlobalCallManager from "@/components/GlobalCallManager"; // <-- Import mới
 
 const beVietnamPro = Be_Vietnam_Pro({
   subsets: ["vietnamese"],
@@ -25,7 +26,10 @@ export default function RootLayout({
         className={`${beVietnamPro} antialiased`}
       >
         <AuthProvider>
-          <div className="h-full flex flex-col">
+          <div className="h-full flex flex-col relative">
+            {/* Đặt GlobalCallManager ở đây để nó hiển thị đè lên mọi thứ */}
+            <GlobalCallManager />
+            
             <Navbar />
             {children}</div>
         </AuthProvider>

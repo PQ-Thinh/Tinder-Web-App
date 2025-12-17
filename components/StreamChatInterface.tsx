@@ -14,12 +14,11 @@ import {
   useRef,
   useState,
 } from "react";
-import { Channel, Event, StreamChat, MessageResponse } from "stream-chat"; // Import MessageResponse
+import { Channel, Event, StreamChat } from "stream-chat";
 import VideoCall from "./VideoCall";
 
 // --- 1. ĐỊNH NGHĨA CÁC INTERFACE ---
 
-// Interface cho tin nhắn hiển thị ở Client
 interface Message {
   id: string;
   text: string;
@@ -28,12 +27,12 @@ interface Message {
   user_id: string;
 }
 
-// Interface cho dữ liệu cuộc gọi đính kèm trong tin nhắn
-// Kế thừa Record<string, unknown> để tương thích với kiểu dữ liệu của StreamChat
+// CẬP NHẬT: Thêm caller_image vào interface
 interface VideoCallCustomData extends Record<string, unknown> {
   call_id?: string;
   caller_id?: string;
   caller_name?: string;
+  caller_image?: string; // <-- Thêm trường này
   text?: string;
 }
 
@@ -48,7 +47,12 @@ export default function StreamChatInterface({
 }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  
+  // State lưu thông tin người dùng hiện tại (người đang đăng nhập)
   const [currentUserId, setCurrentUserId] = useState<string>("");
+  const [currentUserName, setCurrentUserName] = useState<string>(""); // <-- Mới
+  const [currentUserImage, setCurrentUserImage] = useState<string>(""); // <-- Mới
+
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState<string>("");
   const [isTyping, setIsTyping] = useState<boolean>(false);
@@ -61,10 +65,6 @@ export default function StreamChatInterface({
   const [videoCallId, setVideoCallId] = useState<string>("");
   const [showVideoCall, setShowVideoCall] = useState(false);
   const [isCallInitiator, setIsCallInitiator] = useState(false);
-
-  const [incomingCallId, setIncomingCallId] = useState<string>("");
-  const [callerName, setCallerName] = useState<string>("");
-  const [showIncomingCall, setIncomingCall] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
@@ -91,7 +91,6 @@ export default function StreamChatInterface({
 
   useEffect(() => {
     const container = messagesContainerRef.current;
-
     if (container) {
       container.addEventListener("scroll", handleScroll);
       return () => container.removeEventListener("scroll", handleScroll);
@@ -101,18 +100,18 @@ export default function StreamChatInterface({
   useEffect(() => {
     setShowVideoCall(false);
     setVideoCallId("");
-    setIncomingCall(false);
-    setIncomingCallId("");
-    setCallerName("");
     setIsCallInitiator(false);
 
     async function initializeChat() {
       try {
         setError(null);
 
-        const { token, userId, userName, userImage } =
-          await getStreamUserToken();
+        const { token, userId, userName, userImage } = await getStreamUserToken();
+        
+        // Lưu thông tin user hiện tại vào state để dùng khi gọi video
         setCurrentUserId(userId!);
+        setCurrentUserName(userName || "User");
+        setCurrentUserImage(userImage || "");
 
         const chatClient = StreamChat.getInstance(
           process.env.NEXT_PUBLIC_STREAM_API_KEY!
@@ -148,22 +147,7 @@ export default function StreamChatInterface({
 
         chatChannel.on("message.new", (event: Event) => {
           if (event.message) {
-            // Check tin nhắn mời gọi video
-            if (event.message.text?.includes(`📹 Video call invitation`)) {
-
-              // --- THAY THẾ ANY ---
-              // Ép kiểu an toàn sang interface VideoCallCustomData
-              const customData = event.message as unknown as VideoCallCustomData;
-
-              // Chỉ hiện thông báo cho người nhận (ID khác người gửi)
-              if (customData.caller_id && customData.caller_id !== userId) {
-                setIncomingCallId(customData.call_id || "");
-                setCallerName(customData.caller_name || "Someone");
-                setIncomingCall(true);
-              }
-              return;
-            }
-
+            // Logic hiển thị tin nhắn chat thông thường
             if (event.message.user?.id !== userId) {
               const newMsg: Message = {
                 id: event.message.id,
@@ -178,7 +162,6 @@ export default function StreamChatInterface({
                 if (!messageExists) {
                   return [...prev, newMsg];
                 }
-
                 return prev;
               });
             }
@@ -225,17 +208,16 @@ export default function StreamChatInterface({
       setIsCallInitiator(true);
 
       if (channel) {
-        // --- THAY THẾ ANY ---
-        // Tạo object đúng kiểu VideoCallCustomData
+        // CẬP NHẬT: Gửi đầy đủ thông tin người gọi (Tên, Ảnh) của CHÍNH MÌNH
         const messageData: VideoCallCustomData = {
           text: `📹 Video call invitation`,
           call_id: callId,
           caller_id: currentUserId,
-          caller_name: otherUser.full_name || "Someone",
+          caller_name: currentUserName, // Dùng tên của mình
+          caller_image: currentUserImage, // Dùng ảnh của mình
         };
 
-        // Stream Chat sendMessage chấp nhận Record<string, unknown> cho custom fields
-        // Chúng ta ép kiểu về Record<string, unknown> để TypeScript không báo lỗi thiếu các trường mặc định của Message
+        // Gửi tin nhắn chứa metadata cuộc gọi
         await channel.sendMessage(messageData as unknown as Record<string, unknown>);
       }
     } catch (error) {
@@ -268,7 +250,6 @@ export default function StreamChatInterface({
           if (!messageExists) {
             return [...prev, message];
           }
-
           return prev;
         });
 
@@ -283,28 +264,6 @@ export default function StreamChatInterface({
     setShowVideoCall(false);
     setVideoCallId("");
     setIsCallInitiator(false);
-
-    setIncomingCall(false);
-    setIncomingCallId("");
-    setCallerName("");
-  }
-
-  function handleDeclineCall() {
-    setIncomingCall(false);
-    setIncomingCallId("");
-    setCallerName("");
-  }
-
-  function handleAcceptCall() {
-    setVideoCallId(incomingCallId);
-    setShowVideoCall(true);
-
-    setIncomingCall(false);
-    setIncomingCallId("");
-    setCallerName("");
-    setIsCallInitiator(false);
-
-    onCallStart?.(incomingCallId);
   }
 
   function formatTime(date: Date) {
@@ -408,7 +367,6 @@ export default function StreamChatInterface({
             value={newMessage}
             onChange={(e) => {
               setNewMessage(e.target.value);
-
               if (channel && e.target.value.length > 0) {
                 channel.keystroke();
               }
@@ -444,42 +402,6 @@ export default function StreamChatInterface({
           </button>
         </form>
       </div>
-
-      {showIncomingCall && (
-        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
-          <div className="bg-white dark:bg-gray-800 rounded-2xl p-8 max-w-sm mx-4 shadow-2xl">
-            <div className="text-center">
-              <div className="w-20 h-20 rounded-full overflow-hidden mx-auto mb-4 border-4 border-pink-500">
-                <img
-                  src={otherUser.avatar_url || "default-avartar.png"}
-                  alt={otherUser.full_name}
-                  className="w-full h-full object-cover"
-                />
-              </div>
-              <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
-                Cuộc gọi Video đến
-              </h3>
-              <p className="text-gray-600 dark:text-gray-400 mb-6">
-                {callerName} đang gọi cho bạn
-              </p>
-              <div className="flex space-x-4">
-                <button
-                  onClick={handleDeclineCall}
-                  className="flex-1 bg-red-500 text-white py-3 px-6 rounded-full font-semibold hover:bg-red-600 transition-colors duration-200"
-                >
-                  Từ chối
-                </button>
-                <button
-                  onClick={handleAcceptCall}
-                  className="flex-1 bg-green-500 text-white py-3 px-6 rounded-full font-semibold hover:bg-green-600 transition-colors duration-200"
-                >
-                  Chấp nhận
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
 
       {showVideoCall && videoCallId && (
         <VideoCall
