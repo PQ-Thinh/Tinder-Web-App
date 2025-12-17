@@ -3,18 +3,23 @@
 import { UserProfile } from "@/app/profile/page";
 import ChatHeader from "@/components/ChatHeader";
 import StreamChatInterface from "@/components/StreamChatInterface";
+import VideoCall from "@/components/VideoCall";
 import { useAuth } from "@/contexts/auth-context";
 import { getUserMatches } from "@/lib/actions/matches";
 import { useParams, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 export default function ChatConversationPage() {
   const [otherUser, setOtherUser] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [inCall, setInCall] = useState(false);
+  const [currentCallId, setCurrentCallId] = useState<string>("");
   const router = useRouter();
   const params = useParams();
-  const {user} = useAuth();
+  const { user } = useAuth();
   const userId = params.userId as string;
+
+  const chatInterfaceRef = useRef<{ handleVideoCall: () => void } | null>(null);
 
   useEffect(() => {
     async function loadUserData() {
@@ -27,7 +32,6 @@ export default function ChatConversationPage() {
         } else {
           router.push("/chat");
         }
-        console.log(userMatches);
       } catch (error) {
         console.error(error);
         router.push("/chat");
@@ -36,11 +40,22 @@ export default function ChatConversationPage() {
       }
     }
 
-    if (user) {
-        loadUserData()
-    }
     loadUserData();
-  }, [userId, router, user]);
+  }, [userId, router]);
+
+  const handleVideoCallFromHeader = () => {
+    chatInterfaceRef.current?.handleVideoCall();
+  };
+
+  const handleCallStart = (callId: string) => {
+    setCurrentCallId(callId);
+    setInCall(true);
+  };
+
+  const handleCallEnd = () => {
+    setInCall(false);
+    setCurrentCallId("");
+  };
 
   if (loading) {
     return (
@@ -82,12 +97,27 @@ export default function ChatConversationPage() {
 
   return (
     <div className="h-screen bg-gradient-to-br from-pink-50 to-red-50 dark:from-gray-900 dark:to-gray-800">
-      <div className="max-w-4xl mx-auto h-full flex flex-col">
-        <ChatHeader user={otherUser} />
+      <div className="max-w-4xl mx-auto h-full flex flex-col relative">
+        <ChatHeader
+          user={otherUser}
+          onVideoCall={handleVideoCallFromHeader}
+        />
 
         <div className="flex-1 min-h-0">
-          <StreamChatInterface otherUser={otherUser} />
+          <StreamChatInterface
+            otherUser={otherUser}
+            ref={chatInterfaceRef}
+            onCallStart={handleCallStart}
+          />
         </div>
+
+        {/* OVERLAY VIDEO CALL */}
+        {inCall && currentCallId && (
+          <VideoCall
+            callId={currentCallId}
+            onCallEnd={handleCallEnd}
+          />
+        )}
       </div>
     </div>
   );
