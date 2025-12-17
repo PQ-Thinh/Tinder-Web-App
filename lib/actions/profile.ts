@@ -1,7 +1,7 @@
 "use server";
 
 import { createClient } from "../supabase/sever";
-// import { UserProfile, UserTableUpdate } from "./profile";
+import { revalidatePath } from "next/cache";
 
 // --- 1. DEFINITIONS & INTERFACES ---
 
@@ -24,7 +24,7 @@ export interface UserProfile {
     gender?: string;
     birthdate?: string;
     avatar_url?: string;
-    photos: string[]; // Mảng ảnh (Bắt buộc trong Profile hoàn chỉnh)
+    photos: string[];
     display_address?: string;
     preferences?: Record<string, unknown>;
     is_profile_completed?: boolean;
@@ -32,22 +32,29 @@ export interface UserProfile {
     longitude?: number | null;
     hobbiesIds?: string[];
     hobbies?: Hobby[];
+    is_online?: boolean;
+    last_active?: string;
+    is_verified?: boolean;
 }
 
-// Payload để update bảng users
+// FIX: Mở rộng interface này để bao gồm TẤT CẢ các trường có thể update
+// Điều này giúp bạn không cần dùng 'as any' ở các hàm khác
 interface UserTableUpdate {
     full_name?: string;
     username?: string;
-    bio?: string;
+    bio?: string | null; // Cho phép null
     gender?: string;
     birthdate?: string;
-    avatar_url?: string;
-    photos?: string[]; // <--- FIX LỖI Ở ĐÂY: Thêm dấu ? để cho phép undefined
-    display_address?: string;
+    avatar_url?: string | null;
+    photos?: string[];
+    display_address?: string | null;
     preferences?: Record<string, unknown>;
     is_profile_completed?: boolean;
     updated_at?: string;
     location?: string;
+    is_online?: boolean;     // Thêm trường này
+    last_active?: string;    // Thêm trường này
+    is_verified?: boolean;   // Thêm trường này
 }
 
 // --- 2. SERVER ACTIONS ---
@@ -75,16 +82,13 @@ export async function getCurrentUserProfile(): Promise<UserProfile | null> {
         .single();
 
     if (error || !data) {
-        console.error("Error fetching profile:", error);
         return null;
     }
 
-    // Xử lý Hobbies
     const rawUserHobbies = (data.user_hobbies || []) as unknown as UserHobbyJoin[];
     const validHobbies = rawUserHobbies.map((item) => item.hobbies).filter((h): h is Hobby => h !== null);
     const hobbiesIds = validHobbies.map((h) => h.id);
 
-    // Xử lý Location
     let latitude: number | null = null;
     let longitude: number | null = null;
     if (data.location && typeof data.location === "string") {
@@ -95,9 +99,7 @@ export async function getCurrentUserProfile(): Promise<UserProfile | null> {
         }
     }
 
-    // Xử lý Photos: Đảm bảo luôn là mảng (nếu DB null thì trả về [])
     const photos = Array.isArray(data.photos) ? data.photos : [];
-
     const { user_hobbies, location, ...profileFields } = data;
 
     return {
@@ -107,58 +109,70 @@ export async function getCurrentUserProfile(): Promise<UserProfile | null> {
         longitude,
         hobbiesIds,
         hobbies: validHobbies,
-        photos, // Trả về mảng ảnh
+        photos,
     };
 }
+
+// --- HÀM SET ONLINE (KHÔNG DÙNG ANY) ---
 export async function setUserOnlineStatus(isOnline: boolean) {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
-    await supabase.from("users").update({
+    // Sử dụng interface UserTableUpdate để đảm bảo type safety
+    const updates: UserTableUpdate = {
         is_online: isOnline,
         last_active: new Date().toISOString()
-    }).eq("id", user.id);
+    };
+
+    await supabase.from("users").update(updates).eq("id", user.id);
 }
-// --- HÀM MỚI: XÁC MINH TÀI KHOẢN (GỌI SAU KHI OTP THÀNH CÔNG) ---
+
+// --- HÀM VERIFY (KHÔNG DÙNG ANY) ---
 export async function markUserAsVerified() {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
-    await supabase.from("users").update({
+    const updates: UserTableUpdate = {
         is_verified: true,
         updated_at: new Date().toISOString()
-    }).eq("id", user.id);
+    };
+
+    await supabase.from("users").update(updates).eq("id", user.id);
 }
+
+// --- HÀM UPDATE PROFILE CHÍNH (ĐÃ SỬA LỖI LOGIC) ---
 export async function updateUserProfile(profileData: Partial<UserProfile>) {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
 
     if (!user) return { success: false, error: "User not authenticated" };
 
-    // Kiểm tra xem các trường quan trọng có dữ liệu chưa
+    // 1. TÍNH TOÁN TRẠNG THÁI HOÀN THÀNH
     const hasBasicInfo = !!profileData.full_name && !!profileData.username && !!profileData.birthdate && !!profileData.gender;
-    const hasPhoto = profileData.photos && profileData.photos.length > 0;
-    const hasLocation = !!profileData.latitude && !!profileData.longitude; // Hoặc check display_address
+    const hasLocation = (!!profileData.latitude && !!profileData.longitude) || !!profileData.display_address;
     const hasBio = !!profileData.bio;
-    // const hasHobbies = profileData.hobbiesIds && profileData.hobbiesIds.length > 0; // Tùy chọn
 
-    // Nếu đủ thông tin -> set true, ngược lại false
+    // FIX LOGIC ẢNH: Chỉ cần có Avatar HOẶC có ảnh trong thư viện là tính đã có ảnh
+    // Code cũ bắt buộc phải có ảnh thư viện profileData.photos
+    const hasPhoto = !!profileData.avatar_url || (profileData.photos && profileData.photos.length > 0);
+
+    // Điều kiện hoàn thành:
     const isCompleted = hasBasicInfo && hasPhoto && hasLocation && hasBio;
 
-    // 1. Chuẩn bị dữ liệu Update
+    // 2. CHUẨN BỊ DATA UPDATE
     const userUpdates: UserTableUpdate = {
         full_name: profileData.full_name,
         username: profileData.username,
-        bio: profileData.bio || undefined,
+        bio: profileData.bio || null, // Chuyển undefined thành null cho Supabase
         gender: profileData.gender,
         birthdate: profileData.birthdate,
-        avatar_url: profileData.avatar_url || undefined,
-        display_address: profileData.display_address || undefined,
+        avatar_url: profileData.avatar_url || null,
+        display_address: profileData.display_address || null,
         preferences: profileData.preferences,
-        is_profile_completed: profileData.is_profile_completed,
-        photos: profileData.photos, // Giờ đã OK vì interface UserTableUpdate cho phép optional
+        is_profile_completed: isCompleted,
+        photos: profileData.photos,
         updated_at: new Date().toISOString(),
     };
 
@@ -166,7 +180,7 @@ export async function updateUserProfile(profileData: Partial<UserProfile>) {
         userUpdates.location = `POINT(${profileData.longitude} ${profileData.latitude})`;
     }
 
-    // 2. Update Users Table
+    // 3. THỰC HIỆN UPDATE
     const { error: userError } = await supabase
         .from("users")
         .update(userUpdates)
@@ -177,7 +191,7 @@ export async function updateUserProfile(profileData: Partial<UserProfile>) {
         return { success: false, error: userError.message };
     }
 
-    // 3. Update Hobbies (Logic cũ giữ nguyên)
+    // 4. UPDATE HOBBIES
     if (profileData.hobbiesIds) {
         const { error: deleteError } = await supabase.from("user_hobbies").delete().eq("user_id", user.id);
         if (deleteError) return { success: false, error: "Failed to update hobbies" };
@@ -191,11 +205,11 @@ export async function updateUserProfile(profileData: Partial<UserProfile>) {
             if (insertError) return { success: false, error: "Failed to save new hobbies" };
         }
     }
-
+    revalidatePath('/', 'layout');
     return { success: true };
 }
 
-// 4. UPLOAD ẢNH (Đã nâng cấp để hỗ trợ cả Avatar và Gallery)
+// 4. UPLOAD ẢNH
 export async function uploadProfilePhoto(file: File, bucketName: "avatars" | "profile-photos" = "avatars") {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
@@ -203,14 +217,13 @@ export async function uploadProfilePhoto(file: File, bucketName: "avatars" | "pr
     if (!user) return { success: false, error: "User not authenticated" };
 
     const fileExt = file.name.split(".").pop();
-    // Tạo tên file unique: user_id/timestamp.ext
     const fileName = `${user.id}/${Date.now()}.${fileExt}`;
 
     const { error } = await supabase.storage
         .from(bucketName)
         .upload(fileName, file, {
             cacheControl: "3600",
-            upsert: true, // Cho phép ghi đè nếu trùng tên (dù có timestamp nên khó trùng)
+            upsert: true,
         });
 
     if (error) {
