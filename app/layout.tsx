@@ -1,13 +1,7 @@
 import type { Metadata } from "next";
-import { Be_Vietnam_Pro } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/contexts/auth-context";
 import Navbar from "@/components/Navbar";
-
-const beVietnamPro = Be_Vietnam_Pro({
-  subsets: ["vietnamese"],
-  weight: ["400", "700"]
-});
 
 export const metadata: Metadata = {
   title: "Create Next App",
@@ -21,13 +15,12 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body
-        className={`${beVietnamPro} antialiased`}
-      >
+      <body className={`antialiased`}>
         <AuthProvider>
           <div className="h-full flex flex-col">
             <Navbar />
-            {children}</div>
+            {children}
+          </div>
         </AuthProvider>
       </body>
     </html>

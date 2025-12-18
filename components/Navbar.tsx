@@ -269,7 +269,7 @@ export default function Navbar() {
 
   return (
     <nav className="relative z-50 bg-white/90 dark:bg-gray-900/90 backdrop-blur-xl border-b border-gray-100 dark:border-gray-800 shadow-sm sticky top-0">
-      <div className="container mx-auto px-6">
+      <div className="container mx-auto px-4 sm:px-6">
         <div className="flex items-center justify-between h-20">
           {/* 1. LOGO */}
           <Link
@@ -316,7 +316,7 @@ export default function Navbar() {
           {user && (
             <div
               ref={navItemsRef}
-              className="hidden md:flex items-center space-x-4 lg:space-x-6"
+              className="hidden lg:flex items-center space-x-2 xl:space-x-6"
             >
               {NAV_ITEMS.map((item) => (
                 <NavLink key={item.href} {...item} />
@@ -325,8 +325,8 @@ export default function Navbar() {
           )}
 
           {/* 3. RIGHT ACTIONS */}
-          <div className="flex items-center gap-3">
-            <div className="hidden md:block">
+          <div className="flex items-center gap-2 sm:gap-3">
+            <div className="hidden lg:block">
               {user ? (
                 <button
                   onClick={handleSignOut}
@@ -366,7 +366,7 @@ export default function Navbar() {
             {user && (
               <button
                 onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-                className="md:hidden p-2 text-gray-600 dark:text-gray-300 hover:text-pink-500 transition-colors rounded-xl hover:bg-pink-50 dark:hover:bg-gray-800"
+                className="lg:hidden p-2 text-gray-600 dark:text-gray-300 hover:text-pink-500 transition-colors rounded-xl hover:bg-pink-50 dark:hover:bg-gray-800"
               >
                 {isMobileMenuOpen ? (
                   <svg
@@ -406,7 +406,7 @@ export default function Navbar() {
       {/* 4. MOBILE MENU DROPDOWN */}
       <div
         ref={mobileMenuRef}
-        className="md:hidden overflow-hidden h-0 opacity-0 bg-white/95 dark:bg-gray-900/95 backdrop-blur-xl border-b border-gray-100 dark:border-gray-800 absolute w-full left-0 top-16 shadow-2xl rounded-b-3xl"
+        className="lg:hidden overflow-hidden h-0 opacity-0 bg-white/95 dark:bg-gray-900/95 backdrop-blur-xl border-b border-gray-100 dark:border-gray-800 absolute w-full left-0 top-[79px] shadow-2xl rounded-b-3xl"
         style={{ display: "none" }}
       >
         <div className="container mx-auto px-4 py-6 flex flex-col space-y-3">
