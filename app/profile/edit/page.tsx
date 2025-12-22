@@ -120,16 +120,11 @@ export default function EditProfilePage() {
     const updatePreference = <K extends keyof UserPreferences>(field: K, value: UserPreferences[K]) => {
         setFormData(prev => ({ ...prev, preferences: { ...prev.preferences, [field]: value } }));
     };
-    // 1. Hàm xử lý khi đang nhập liệu (Cho phép gõ tự do)
+
     const updateAgeRange = (type: 'min' | 'max', value: number) => {
-        // Chỉ chặn nếu lớn hơn 50 ngay lập tức (Hard limit)
         if (value > 50) value = 50;
 
-        // Xóa logic chặn < 18 ở đây để người dùng có thể gõ số (ví dụ gõ 2 để ra 25)
-
-        // Validation Logic (Kiểm tra chéo Min/Max để hiện lỗi)
         let newError = null;
-        // Lưu ý: Lấy giá trị đối chiếu từ state hiện tại
         const otherValue = type === 'min'
             ? formData.preferences.age_range.max
             : formData.preferences.age_range.min;
@@ -144,7 +139,6 @@ export default function EditProfilePage() {
             }
         }
 
-        // Nếu nhỏ hơn 18 thì báo lỗi nhẹ hoặc để onBlur xử lý, ở đây ta tạm clear lỗi nếu hợp lệ chéo
         if (value >= 18 && !newError) setAgeError(null);
         else if (newError) setAgeError(newError);
 
@@ -157,17 +151,14 @@ export default function EditProfilePage() {
         }));
     };
 
-    // 2. Hàm xử lý khi người dùng nhập xong (Click ra ngoài ô input)
     const handleAgeBlur = (type: 'min' | 'max') => {
         let value = formData.preferences.age_range[type];
-
-        // Nếu nhập NaN (xóa trắng) hoặc nhỏ hơn 18 -> Tự động sửa về 18
         if (isNaN(value) || value < 18) {
             value = 18;
-            // Cập nhật lại state với giá trị hợp lệ
             updateAgeRange(type, value);
         }
     };
+
     const toggleGenderPref = (gender: string) => {
         setFormData(prev => {
             const current = prev.preferences.gender_preference || [];
@@ -175,6 +166,7 @@ export default function EditProfilePage() {
             return { ...prev, preferences: { ...prev.preferences, gender_preference: updated } };
         });
     };
+
     const toggleHobby = (hobbyId: string) => {
         setFormData((prev) => {
             const exists = prev.hobbiesIds.includes(hobbyId);
@@ -191,6 +183,7 @@ export default function EditProfilePage() {
             return { ...prev, hobbiesIds: newHobbies };
         });
     };
+
     const handleGetLocation = () => {
         if (!navigator.geolocation) {
             setError("Trình duyệt không hỗ trợ định vị.");
@@ -221,8 +214,10 @@ export default function EditProfilePage() {
             { timeout: 10000, enableHighAccuracy: true }
         );
     };
+
     const handleAddPhoto = (url: string) => { if (formData.photos.length >= 5) return; setFormData(prev => ({ ...prev, photos: [...prev.photos, url] })); };
     const handleRemovePhoto = (indexToRemove: number) => { setFormData(prev => ({ ...prev, photos: prev.photos.filter((_, index) => index !== indexToRemove) })); };
+
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
         const { name, value } = e.target;
         setFormData((prev) => ({ ...prev, [name]: value }));
@@ -238,7 +233,7 @@ export default function EditProfilePage() {
         if (ageError) {
             setError("Vui lòng sửa lỗi độ tuổi trước khi lưu.");
             setSaving(false);
-            window.scrollTo({ top: 0, behavior: "smooth" }); // Cuộn lên để thấy lỗi
+            window.scrollTo({ top: 0, behavior: "smooth" });
             return;
         }
 
@@ -260,7 +255,6 @@ export default function EditProfilePage() {
             return;
         }
 
-
         try {
             const result = await updateUserProfile(formData as unknown as Partial<UserProfile>);
             if (result.success) {
@@ -275,229 +269,298 @@ export default function EditProfilePage() {
         }
     }
 
+    // --- STYLES ---
+    // Style cho Input để nổi bật trên nền kính
     const getInputClass = (fieldName: keyof ProfileFormData) => {
-        const baseClass = "w-full px-4 py-2 border rounded-lg focus:ring-2 dark:bg-gray-700 dark:text-white transition-all";
-        const errorClass = "border-red-500 focus:ring-red-500 bg-red-50 dark:bg-red-900/10";
-        const normalClass = "border-gray-300 focus:ring-pink-500 dark:border-gray-600";
+        const baseClass = "w-full px-4 py-3 border rounded-xl focus:ring-2 dark:bg-gray-700 dark:text-white transition-all outline-none font-medium";
+        const errorClass = "border-red-400 focus:ring-red-400 bg-red-50 text-red-900 placeholder-red-400";
+        const normalClass = "border-white/50 bg-white/50 focus:bg-white focus:border-pink-300 focus:ring-pink-200 dark:border-gray-600 dark:focus:bg-gray-700";
         return `${baseClass} ${fieldErrors[fieldName] ? errorClass : normalClass}`;
     };
 
+    const cardClass = "bg-white/60 dark:bg-gray-800/60 backdrop-blur-xl rounded-[2rem] shadow-xl border border-white/50 p-6 sm:p-8 relative overflow-hidden";
 
-    if (loading) return <div className="h-screen flex items-center justify-center"><div className="animate-spin rounded-full h-10 w-10 border-b-2 border-pink-500"></div></div>;
+    if (loading) return (
+        <div className="min-h-screen flex items-center justify-center" style={{ background: "linear-gradient(135deg, #FFDEE9 0%, #B5FFFC 100%)" }}>
+            <div className="w-16 h-16 border-4 border-pink-400 border-t-transparent rounded-full animate-spin"></div>
+        </div>
+    );
 
     return (
-        <div className="min-h-screen bg-gradient-to-br from-pink-50 to-red-50 dark:from-gray-900 dark:to-gray-800 relative">
+        <div
+            className="min-h-screen pb-20 relative"
+            // 1. MÀU NỀN ĐÃ ĐƯỢC CHỈNH LẠI
+            style={{ background: "linear-gradient(135deg, #FFDEE9 0%, #B5FFFC 100%)" }}
+        >
 
+            {/* Loading Overlay khi Save */}
             {saving && (
-                <div className="fixed inset-0 bg-black/50 z-50 flex flex-col items-center justify-center backdrop-blur-sm">
-                    <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-2xl flex flex-col items-center animate-bounce-in">
+                <div className="fixed inset-0 bg-black/30 z-50 flex items-center justify-center backdrop-blur-sm">
+                    <div className="bg-white/90 dark:bg-gray-800 p-8 rounded-3xl shadow-2xl flex flex-col items-center animate-bounce-in">
                         <div className="animate-spin rounded-full h-12 w-12 border-4 border-gray-200 border-t-pink-500 mb-4"></div>
-                        <p className="text-gray-800 dark:text-white font-semibold text-lg">Đang lưu thay đổi...</p>
-                        <p className="text-gray-500 text-sm">Vui lòng đợi trong giây lát</p>
+                        <p className="text-slate-800 dark:text-white font-bold text-lg">Đang lưu...</p>
                     </div>
                 </div>
             )}
 
             <div className="container mx-auto px-4 py-8">
-                <header className="text-center mb-8">
-                    <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">Chỉnh sửa hồ sơ</h1>
-                    <p className="text-gray-600 dark:text-gray-400">Hoàn thiện thông tin để bắt đầu kết nối.</p>
+                <header className="text-center mb-10">
+                    <h1 className="text-3xl font-extrabold text-slate-800 dark:text-white mb-2 drop-shadow-sm">Chỉnh Sửa Hồ Sơ</h1>
+                    <p className="text-slate-600 dark:text-gray-400 font-medium">Cập nhật thông tin để thu hút nhiều lượt thích hơn</p>
                 </header>
 
-                {/* THAY ĐỔI: max-w-6xl để rộng hơn cho giao diện 2 cột */}
-                <div className="max-w-6xl mx-auto">
-                    <form className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-6 md:p-8" onSubmit={handleFormSubmit}>
+                {/* 2. BỐ CỤC: FORM BAO QUANH GRID CÁC THẺ CARD */}
+                <form className="max-w-6xl mx-auto" onSubmit={handleFormSubmit}>
 
-                        {/* Error Notification */}
-                        {error && (
-                            <div className="mb-6 p-4 bg-red-100 border border-red-400 text-red-700 rounded-lg flex items-center gap-3 animate-pulse">
-                                <span className="text-xl">⚠️</span>
-                                <span className="font-medium">{error}</span>
-                            </div>
-                        )}
+                    {error && (
+                        <div className="mb-8 p-4 bg-red-100/80 backdrop-blur border border-red-300 text-red-700 rounded-2xl flex items-center gap-3 animate-pulse shadow-sm">
+                            <span className="text-xl">⚠️</span>
+                            <span className="font-bold">{error}</span>
+                        </div>
+                    )}
 
-                        {/* LAYOUT GRID: Mobile 1 cột, Desktop (lg) 2 cột */}
-                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-12">
+                    <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
 
-                            {/* --- CỘT TRÁI: THÔNG TIN CÁ NHÂN --- */}
-                            <div className="space-y-6">
-                                <h3 className="text-xl font-bold text-gray-900 dark:text-white border-b pb-2 mb-4">Thông tin cá nhân</h3>
+                        {/* --- CỘT TRÁI: THÔNG TIN CÁ NHÂN (8/12) --- */}
+                        <div className="lg:col-span-8 space-y-8">
 
-                                {/* Avatar */}
-                                <div className={`p-4 rounded-xl border ${fieldErrors.avatar_url ? 'border-red-500 bg-red-50 dark:bg-red-900/10' : 'border-gray-100 dark:border-gray-700'}`}>
-                                    <label className={`block text-sm font-medium mb-4 ${fieldErrors.avatar_url ? 'text-red-600' : 'text-gray-700 dark:text-gray-300'}`}>Ảnh Đại Diện {fieldErrors.avatar_url && "* (Bắt buộc)"}</label>
-                                    <div className="flex items-center space-x-6">
-                                        <div className="relative">
-                                            <div className={`w-24 h-24 rounded-full overflow-hidden border-4 shadow-sm ${fieldErrors.avatar_url ? 'border-red-500' : 'border-white dark:border-gray-700'}`}>
+                            {/* CARD 1: Thông tin cơ bản & Avatar */}
+                            <div className={cardClass}>
+                                <h3 className="text-xl font-bold text-slate-800 dark:text-white mb-6 flex items-center">
+                                    <span className="bg-pink-100 text-pink-600 p-2 rounded-lg mr-3 shadow-sm">👤</span>
+                                    Thông tin cá nhân
+                                </h3>
+
+                                <div className="flex flex-col md:flex-row gap-8">
+                                    {/* Cột Avatar */}
+                                    <div className="flex flex-col items-center md:items-start space-y-4">
+                                        <div className={`relative w-32 h-32 rounded-full p-1 bg-gradient-to-tr from-pink-400 to-rose-400 shadow-lg ${fieldErrors.avatar_url ? 'ring-4 ring-red-400' : ''}`}>
+                                            <div className="w-full h-full rounded-full overflow-hidden border-4 border-white dark:border-gray-800 bg-white">
                                                 <img src={formData.avatar_url || "/default-avatar.png"} alt="Profile" className="w-full h-full object-cover" />
                                             </div>
-                                            <div className="mt-2"><PhotoUpload onPhotoUploaded={(url) => { setFormData((prev) => ({ ...prev, avatar_url: url })); setFieldErrors(prev => ({ ...prev, avatar_url: false })); }} /></div>
+                                            <div className="absolute bottom-0 right-0 transform translate-x-1/4 translate-y-1/4">
+                                                <PhotoUpload onPhotoUploaded={(url) => { setFormData((prev) => ({ ...prev, avatar_url: url })); setFieldErrors(prev => ({ ...prev, avatar_url: false })); }} />
+                                            </div>
                                         </div>
-                                        <div><p className="text-sm text-gray-600 dark:text-gray-400 mb-2">Tải lên ảnh đẹp nhất của bạn</p><p className="text-xs text-gray-500">JPG, PNG. Tối đa 5MB.</p></div>
+                                        <p className="text-xs text-slate-500 font-medium text-center md:text-left">Chạm vào máy ảnh<br />để thay đổi</p>
+                                    </div>
+
+                                    {/* Cột Input */}
+                                    <div className="flex-1 w-full space-y-5">
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                                            <div>
+                                                <label className="block text-sm font-bold text-slate-700 dark:text-gray-300 mb-2">Tên hiển thị <span className="text-red-500">*</span></label>
+                                                <input type="text" name="full_name" value={formData.full_name} onChange={handleInputChange} className={getInputClass('full_name')} placeholder="VD: Nguyễn Văn A" />
+                                            </div>
+                                            <div>
+                                                <label className="block text-sm font-bold text-slate-700 dark:text-gray-300 mb-2">Username <span className="text-red-500">*</span></label>
+                                                <input type="text" name="username" value={formData.username} onChange={handleInputChange} className={getInputClass('username')} placeholder="@username" />
+                                            </div>
+                                        </div>
+
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                                            <div>
+                                                <label className="block text-sm font-bold text-slate-700 dark:text-gray-300 mb-2">Giới Tính <span className="text-red-500">*</span></label>
+                                                <div className="relative">
+                                                    <select name="gender" value={formData.gender} onChange={handleInputChange} className={`${getInputClass('gender')} appearance-none cursor-pointer`}>
+                                                        <option value="male">Nam</option>
+                                                        <option value="female">Nữ</option>
+                                                        <option value="other">Khác</option>
+                                                    </select>
+                                                    <div className="absolute inset-y-0 right-0 flex items-center px-4 pointer-events-none text-slate-500">
+                                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div>
+                                                <label className="block text-sm font-bold text-slate-700 dark:text-gray-300 mb-2">Sinh nhật <span className="text-red-500">*</span></label>
+                                                <input type="date" name="birthdate" value={formData.birthdate} onChange={handleInputChange} className={getInputClass('birthdate')} />
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
+                            </div>
 
-                                {/* Inputs */}
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    <div><label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Tên đầy đủ <span className="text-red-500">*</span></label><input type="text" name="full_name" value={formData.full_name} onChange={handleInputChange} className={getInputClass('full_name')} placeholder="Tên hiển thị" /></div>
-                                    <div><label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Username <span className="text-red-500">*</span></label><input type="text" name="username" value={formData.username} onChange={handleInputChange} className={getInputClass('username')} placeholder="@username" /></div>
-                                </div>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    <div><label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Giới Tính <span className="text-red-500">*</span></label><select name="gender" value={formData.gender} onChange={handleInputChange} className={getInputClass('gender')}><option value="male">Nam</option><option value="female">Nữ</option><option value="other">Khác</option></select></div>
-                                    <div><label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Sinh nhật <span className="text-red-500">*</span></label><input type="date" name="birthdate" value={formData.birthdate} onChange={handleInputChange} className={getInputClass('birthdate')} /></div>
-                                </div>
+                            {/* CARD 2: Bio & Location */}
+                            <div className={cardClass}>
+                                <h3 className="text-xl font-bold text-slate-800 dark:text-white mb-6 flex items-center">
+                                    <span className="bg-blue-100 text-blue-600 p-2 rounded-lg mr-3 shadow-sm">📝</span>
+                                    Giới thiệu & Vị trí
+                                </h3>
 
-                                {/* Location */}
-                                <div className={`p-4 rounded-lg border transition-colors ${fieldErrors.display_address ? 'bg-red-50 border-red-500 dark:bg-red-900/10' : 'bg-blue-50 border-blue-100 dark:bg-gray-700 dark:border-gray-600'}`}>
-                                    <label className={`block text-sm font-semibold mb-2 ${fieldErrors.display_address ? 'text-red-600' : 'text-gray-700 dark:text-gray-200'}`}>📍 Vị trí <span className="text-red-500">*</span></label>
-                                    <div className="flex gap-2">
-                                        <input type="text" value={formData.display_address} readOnly placeholder={fieldErrors.display_address ? "Vui lòng nhấn cập nhật!" : "Chưa cập nhật vị trí"} className={`flex-1 px-4 py-2 rounded-lg cursor-not-allowed ${fieldErrors.display_address ? 'bg-white border border-red-300 text-red-500 placeholder-red-400' : 'bg-gray-200 dark:bg-gray-600 text-gray-500 dark:text-gray-300'}`} />
-                                        <button type="button" onClick={handleGetLocation} disabled={locationLoading} className={`px-4 py-2 text-white rounded-lg transition-colors whitespace-nowrap shadow-md ${fieldErrors.display_address ? 'bg-red-500 hover:bg-red-600 animate-pulse' : 'bg-pink-500 hover:bg-pink-600'}`}>{locationLoading ? "..." : "Cập nhật"}</button>
+                                <div className="space-y-6">
+                                    {/* Bio */}
+                                    <div>
+                                        <label className="block text-sm font-bold text-slate-700 dark:text-gray-300 mb-2">Bio (Giới thiệu) <span className="text-red-500">*</span></label>
+                                        <textarea name="bio" value={formData.bio} onChange={handleInputChange} rows={4} maxLength={500} className={getInputClass('bio')} placeholder="Hãy viết gì đó thú vị về bản thân..." />
+                                        <div className="flex justify-end mt-1">
+                                            <span className="text-xs text-slate-400 font-medium">{formData.bio.length}/500</span>
+                                        </div>
                                     </div>
-                                    {fieldErrors.display_address && <p className="text-xs text-red-500 mt-1">Bắt buộc phải có vị trí.</p>}
+
+                                    {/* Location */}
+                                    <div>
+                                        <label className="block text-sm font-bold text-slate-700 dark:text-gray-300 mb-2">Vị trí hiện tại <span className="text-red-500">*</span></label>
+                                        <div className={`flex items-center gap-3 p-2 rounded-xl border ${fieldErrors.display_address ? 'bg-red-50 border-red-300' : 'bg-white/50 border-white/50'}`}>
+                                            <div className="flex-1 px-3">
+                                                <input
+                                                    type="text"
+                                                    value={formData.display_address}
+                                                    readOnly
+                                                    placeholder={fieldErrors.display_address ? "Chưa có vị trí!" : "Nhấn nút cập nhật bên cạnh 👉"}
+                                                    className="w-full bg-transparent border-none outline-none text-slate-700 placeholder-slate-400 font-medium cursor-default"
+                                                />
+                                            </div>
+                                            <button
+                                                type="button"
+                                                onClick={handleGetLocation}
+                                                disabled={locationLoading}
+                                                className="bg-slate-800 text-white px-4 py-2 rounded-lg font-bold hover:bg-slate-900 transition flex items-center gap-2 shadow-md"
+                                            >
+                                                {locationLoading ? (
+                                                    <span className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full"></span>
+                                                ) : (
+                                                    <><span>📍</span> Cập nhật</>
+                                                )}
+                                            </button>
+                                        </div>
+                                        {fieldErrors.display_address && <p className="text-xs text-red-500 mt-2 font-bold ml-1">Bạn cần cập nhật vị trí để tìm quanh đây.</p>}
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* CARD 3: Hobbies */}
+                            <div className={cardClass}>
+                                <div className="flex justify-between items-center mb-6">
+                                    <h3 className="text-xl font-bold text-slate-800 dark:text-white flex items-center">
+                                        <span className="bg-green-100 text-green-600 p-2 rounded-lg mr-3 shadow-sm">🎵</span>
+                                        Sở thích
+                                    </h3>
+                                    <span className={`px-3 py-1 rounded-full text-xs font-bold border ${formData.hobbiesIds.length === 5 ? 'bg-green-100 text-green-700 border-green-200' : 'bg-white/50 text-slate-500 border-slate-200'}`}>
+                                        {formData.hobbiesIds.length}/5
+                                    </span>
                                 </div>
 
-                                {/* Bio */}
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Giới thiệu bản thân <span className="text-red-500">*</span></label>
-                                    <textarea name="bio" value={formData.bio} onChange={handleInputChange} rows={4} maxLength={500} className={getInputClass('bio')} placeholder="Viết gì đó về bạn..." />
-                                    <p className="text-xs text-right text-gray-500 mt-1">{formData.bio.length}/500</p>
-                                </div>
+                                {availableHobbies.length > 0 && (
+                                    <div className="flex flex-wrap gap-2.5">
+                                        {availableHobbies.map((hobby) => {
+                                            const isSelected = formData.hobbiesIds.includes(hobby.id);
+                                            return (
+                                                <button
+                                                    key={hobby.id}
+                                                    type="button"
+                                                    onClick={() => toggleHobby(hobby.id)}
+                                                    className={`px-4 py-2 rounded-full text-sm font-bold border transition-all transform hover:scale-105 active:scale-95 ${isSelected ? "bg-pink-500 text-white border-pink-500 shadow-lg shadow-pink-200" : "bg-white/40 text-slate-600 border-white/60 hover:bg-white/80"}`}
+                                                >
+                                                    <span className="mr-1">{hobby.icon}</span> {hobby.name}
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
 
-                                {/* Hobbies */}
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 flex justify-between"><span>Sở thích</span><span className={`text-xs px-2 py-0.5 rounded-full ${formData.hobbiesIds.length === 5 ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'}`}>{formData.hobbiesIds.length}/5</span></label>
-                                    {availableHobbies.length > 0 && (
-                                        <div className="flex flex-wrap gap-2">
-                                            {availableHobbies.map((hobby) => {
-                                                const isSelected = formData.hobbiesIds.includes(hobby.id);
-                                                return (<button key={hobby.id} type="button" onClick={() => toggleHobby(hobby.id)} className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-all ${isSelected ? "bg-pink-500 text-white border-pink-500 shadow-md" : "bg-white text-gray-600 border-gray-200 hover:bg-pink-50 dark:bg-gray-700 dark:text-gray-300"}`}>{hobby.icon} {hobby.name}</button>);
-                                            })}
+                        {/* --- CỘT PHẢI: GALLERY & SETTINGS (4/12) --- */}
+                        <div className="lg:col-span-4 space-y-8">
+
+                            {/* CARD 4: Gallery */}
+                            <div className={cardClass}>
+                                <h3 className="text-xl font-bold text-slate-800 dark:text-white mb-4 flex items-center">
+                                    <span className="bg-purple-100 text-purple-600 p-2 rounded-lg mr-3 shadow-sm">📸</span>
+                                    Thư viện ảnh
+                                </h3>
+                                <p className="text-sm text-slate-500 mb-4 font-medium">Chọn tối đa 5 ảnh đẹp nhất ({formData.photos.length}/5)</p>
+
+                                <div className="flex gap-3 overflow-x-auto pb-4 snap-x scroll-smooth hide-scrollbar">
+                                    {formData.photos.map((photoUrl, index) => (
+                                        <div key={index} className="relative flex-none w-[120px] aspect-[2/3] rounded-2xl overflow-hidden border-[3px] border-white shadow-md group snap-start">
+                                            <img src={photoUrl} alt="User" className="w-full h-full object-cover" />
+                                            <button
+                                                type="button"
+                                                onClick={() => handleRemovePhoto(index)}
+                                                className="absolute top-1.5 right-1.5 bg-red-500 text-white rounded-full p-1.5 shadow-md opacity-0 group-hover:opacity-100 transition-all hover:bg-red-600 transform hover:scale-110"
+                                            >
+                                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M6 18L18 6M6 6l12 12" /></svg>
+                                            </button>
+                                        </div>
+                                    ))}
+
+                                    {formData.photos.length < 5 && (
+                                        <div className="flex-none w-[120px] aspect-[2/3] rounded-2xl border-2 border-dashed border-slate-300 bg-white/30 hover:bg-white/50 transition flex flex-col items-center justify-center snap-start relative group cursor-pointer">
+                                            <div className="mb-2 transform group-hover:scale-110 transition-transform">
+                                                <PhotoUpload variant="gallery" onPhotoUploaded={handleAddPhoto} />
+                                            </div>
+                                            <span className="text-xs text-slate-500 font-bold">Thêm ảnh</span>
                                         </div>
                                     )}
                                 </div>
                             </div>
 
-                            {/* --- CỘT PHẢI: GALLERY & PREFERENCES --- */}
-                            <div className="space-y-8">
-                                <h3 className="text-xl font-bold text-gray-900 dark:text-white border-b pb-2 mb-4">Hình ảnh & Cài đặt</h3>
+                            {/* CARD 5: Preferences */}
+                            <div className={cardClass}>
+                                <h3 className="text-xl font-bold text-slate-800 dark:text-white mb-6 flex items-center">
+                                    <span className="bg-orange-100 text-orange-600 p-2 rounded-lg mr-3 shadow-sm">🎯</span>
+                                    Cài đặt tìm kiếm
+                                </h3>
 
-                                {/* Gallery */}
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-4">
-                                        Thư viện ảnh ({formData.photos.length}/5)
-                                    </label>
-
-                                    {/* THAY ĐỔI: Dùng Flex + Overflow thay vì Grid */}
-                                    <div className="flex gap-3 overflow-x-auto pb-4 snap-x scroll-smooth">
-
-                                        {/* Render các ảnh đã có */}
-                                        {formData.photos.map((photoUrl, index) => (
-                                            <div
-                                                key={index}
-                                                className="relative flex-none w-1/3 min-w-[120px] aspect-[2/3] rounded-lg overflow-hidden border dark:border-gray-600 group snap-start"
-                                            >
-                                                <img
-                                                    src={photoUrl}
-                                                    alt={`Photo ${index + 1}`}
-                                                    className="w-full h-full object-cover"
-                                                />
-                                                <button
-                                                    type="button"
-                                                    onClick={() => handleRemovePhoto(index)}
-                                                    className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-1 shadow-sm opacity-0 group-hover:opacity-100 transition-opacity"
-                                                >
-                                                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-                                                </button>
-                                            </div>
-                                        ))}
-
-                                        {/* Nút Thêm ảnh (Luôn hiện nếu chưa đủ 5 ảnh) */}
-                                        {formData.photos.length < 5 && (
-                                            <div className="flex-none w-1/3 min-w-[120px] aspect-[2/3] rounded-lg border-2 border-dashed border-gray-300 dark:border-gray-600 flex flex-col items-center justify-center bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 transition-colors snap-start relative group cursor-pointer">
-                                                {/* Truyền variant="gallery" để hiện dấu + */}
-                                                <div className="mb-2 transform group-hover:scale-110 transition-transform">
-                                                    <PhotoUpload
-                                                        variant="gallery"
-                                                        onPhotoUploaded={(url) => handleAddPhoto(url)}
-                                                    />
-                                                </div>
-                                                <span className="text-xs text-gray-500 font-medium">Thêm ảnh</span>
-                                            </div>
-                                        )}
+                                {/* Distance */}
+                                <div className="mb-8">
+                                    <div className="flex justify-between mb-3">
+                                        <label className="text-sm font-bold text-slate-700">Khoảng cách tối đa</label>
+                                        <span className="text-sm font-bold text-pink-600 bg-pink-50 px-2 py-0.5 rounded-md">{formData.preferences.distance} km</span>
                                     </div>
+                                    <input
+                                        type="range"
+                                        min="1" max="100"
+                                        value={formData.preferences.distance}
+                                        onChange={(e) => updatePreference('distance', parseInt(e.target.value))}
+                                        className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-pink-500 hover:accent-pink-600"
+                                    />
                                 </div>
-                                {/* Preferences */}
-                                <div className="p-6 bg-purple-50 dark:bg-gray-700/50 rounded-xl border border-purple-100 dark:border-gray-600">
-                                    <h4 className="text-lg font-bold text-gray-900 dark:text-white mb-4">Cài đặt Tìm kiếm</h4>
 
-                                    {/* Distance */}
-                                    <div className="mb-6">
-                                        <div className="flex justify-between mb-2">
-                                            <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Khoảng cách tối đa</label>
-                                            <span className="text-sm font-bold text-pink-600">{formData.preferences.distance} km</span>
-                                        </div>
-                                        <input type="range" min="1" max="100" value={formData.preferences.distance} onChange={(e) => updatePreference('distance', parseInt(e.target.value))} className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-pink-500" />
+                                {/* Age Range */}
+                                <div className="mb-8">
+                                    <label className="block text-sm font-bold text-slate-700 mb-3">Độ tuổi mong muốn</label>
+                                    <div className="flex items-center gap-3">
+                                        <input type="number" min="18" max="50" value={formData.preferences.age_range.min || ''} onChange={(e) => updateAgeRange('min', parseInt(e.target.value) || 0)} onBlur={() => handleAgeBlur('min')} className="w-full px-3 py-2 rounded-xl border border-white/50 bg-white/50 text-center font-bold text-slate-700 focus:ring-2 focus:ring-pink-200 outline-none" />
+                                        <span className="text-slate-400 font-bold">-</span>
+                                        <input type="number" min="18" max="50" value={formData.preferences.age_range.max || ''} onChange={(e) => updateAgeRange('max', parseInt(e.target.value) || 0)} onBlur={() => handleAgeBlur('max')} className="w-full px-3 py-2 rounded-xl border border-white/50 bg-white/50 text-center font-bold text-slate-700 focus:ring-2 focus:ring-pink-200 outline-none" />
                                     </div>
+                                    {ageError && <p className="text-xs text-red-500 mt-2 font-bold text-center">{ageError}</p>}
+                                </div>
 
-                                    {/* Age Range */}
-                                    <div className="mb-6">
-                                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Độ tuổi mong muốn</label>
-                                        <div className="flex items-center gap-4">
-                                            <div className="flex-1">
-                                                <span className="text-xs text-gray-500">Từ</span>
-                                                <input
-                                                    type="number"
-                                                    min="18"
-                                                    max="50"
-                                                    value={formData.preferences.age_range.min || ''} // Handle NaN/Empty visual
-                                                    onChange={(e) => updateAgeRange('min', parseInt(e.target.value) || 0)}
-                                                    onBlur={() => handleAgeBlur('min')} // <--- THÊM SỰ KIỆN NÀY
-                                                    className="w-full mt-1 px-3 py-2 border rounded-lg text-sm dark:bg-gray-600 dark:text-white"
-                                                />
-                                            </div>
-                                            <span className="text-gray-400">-</span>
-                                            <div className="flex-1">
-                                                <span className="text-xs text-gray-500">Đến</span>
-                                                <input
-                                                    type="number"
-                                                    min="18"
-                                                    max="50"
-                                                    value={formData.preferences.age_range.max || ''}
-                                                    onChange={(e) => updateAgeRange('max', parseInt(e.target.value) || 0)}
-                                                    onBlur={() => handleAgeBlur('max')} // <--- THÊM SỰ KIỆN NÀY
-                                                    className="w-full mt-1 px-3 py-2 border rounded-lg text-sm dark:bg-gray-600 dark:text-white"
-                                                />
-                                            </div>
-                                        </div>
-                                        {/* HIỂN THỊ LỖI ĐỘ TUỔI */}
-                                        {ageError && <p className="text-xs text-red-500 mt-2 font-medium">{ageError}</p>}
-                                    </div>
-
-                                    {/* Gender Pref */}
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Tôi muốn xem</label>
-                                        <div className="flex gap-2 flex-wrap">
-                                            {['male', 'female', 'other'].map(gender => (
-                                                <button key={gender} type="button" onClick={() => toggleGenderPref(gender)} className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-all ${formData.preferences.gender_preference.includes(gender) ? "bg-pink-500 text-white border-pink-500" : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50 dark:bg-gray-600 dark:text-gray-300 dark:border-gray-500"}`}>
-                                                    {gender === 'male' ? 'Nam' : gender === 'female' ? 'Nữ' : 'Khác'}
-                                                </button>
-                                            ))}
-                                        </div>
+                                {/* Gender Pref */}
+                                <div>
+                                    <label className="block text-sm font-bold text-slate-700 mb-3">Tôi muốn xem</label>
+                                    <div className="flex flex-wrap gap-2">
+                                        {['male', 'female', 'other'].map(gender => (
+                                            <button
+                                                key={gender}
+                                                type="button"
+                                                onClick={() => toggleGenderPref(gender)}
+                                                className={`flex-1 py-2 px-3 rounded-xl text-sm font-bold border transition-all ${formData.preferences.gender_preference.includes(gender) ? "bg-pink-500 text-white border-pink-500 shadow-md" : "bg-white/50 text-slate-600 border-white/50 hover:bg-white"}`}
+                                            >
+                                                {gender === 'male' ? 'Nam' : gender === 'female' ? 'Nữ' : 'Khác'}
+                                            </button>
+                                        ))}
                                     </div>
                                 </div>
                             </div>
-                        </div>
 
-                        {/* Buttons Bottom */}
-                        <div className="flex items-center justify-between pt-8 mt-8 border-t border-gray-200 dark:border-gray-700">
-                            <button type="button" onClick={() => router.back()} className="px-6 py-2 text-gray-700 dark:text-gray-300 hover:underline">Hủy</button>
-                            <button type="submit" disabled={saving} className="px-8 py-3 bg-gradient-to-r from-pink-500 to-red-500 text-white font-bold text-lg rounded-xl hover:from-pink-600 hover:to-red-600 transition-all shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed">
-                                {saving ? "Đang lưu..." : "Lưu Thay Đổi"}
-                            </button>
+                            {/* Action Buttons */}
+                            <div className="flex gap-4 pt-4">
+                                <button type="button" onClick={() => router.back()} className="flex-1 px-6 py-3 rounded-xl border border-slate-300 bg-white/50 text-slate-700 font-bold hover:bg-white transition">
+                                    Hủy
+                                </button>
+                                <button type="submit" disabled={saving} className="flex-[2] px-6 py-3 rounded-xl bg-gradient-to-r from-pink-500 to-rose-600 text-white font-bold shadow-lg hover:shadow-pink-300/50 hover:-translate-y-0.5 transition-all disabled:opacity-70 disabled:cursor-not-allowed">
+                                    {saving ? "Đang lưu..." : "Lưu Thay Đổi"}
+                                </button>
+                            </div>
+
                         </div>
-                    </form>
-                </div>
+                    </div>
+                </form>
             </div>
         </div>
     );

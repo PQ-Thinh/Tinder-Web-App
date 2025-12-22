@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { calculateAge } from "@/lib/helpers/calculate-age";
 
-// 1. Cập nhật Interface khớp với Database mới
+// --- INTERFACES ---
 export interface Hobby {
     id: string;
     name: string;
@@ -19,7 +19,7 @@ export interface UserPreferences {
         max: number;
     };
     distance: number;
-    gender_preference: string[]; // Supabase trả về string array
+    gender_preference: string[];
 }
 
 export interface UserProfile {
@@ -27,18 +27,14 @@ export interface UserProfile {
     full_name: string;
     username: string;
     email: string;
-    gender: string; // 'male' | 'female' | 'other' | 'unknown'
+    gender: string;
     birthdate: string;
     bio: string | null;
     avatar_url: string | null;
-
-    // Thông tin mới từ Schema V2
-    display_address: string | null; // Thay thế cho location_lat/lng
+    display_address: string | null;
     is_profile_completed: boolean;
-
     preferences: UserPreferences;
-    hobbies?: Hobby[]; // Mảng sở thích (được join từ bảng user_hobbies)
-
+    hobbies?: Hobby[];
     last_active: string;
     is_verified: boolean;
     is_online: boolean;
@@ -61,314 +57,277 @@ export default function ProfilePage() {
         async function loadProfile() {
             try {
                 const profileData = await getCurrentUserProfile();
-                console.log("Hồ sơ đã tải:", profileData);
-
                 if (profileData) {
-                    // Ép kiểu hoặc validate dữ liệu trả về từ Server Action
                     setProfile(profileData as unknown as UserProfile);
                 } else {
                     setError("Không tải được hồ sơ");
                 }
             } catch (err) {
-                console.error("Không tải được hồ sơ: ", err);
+                console.error("Lỗi:", err);
                 setError("Không tải được hồ sơ");
             } finally {
                 setLoading(false);
             }
         }
-
         loadProfile();
     }, []);
 
+    // --- LOADING STATE ---
     if (loading) {
         return (
-            <div className="min-h-screen bg-gradient-to-br from-pink-50 to-red-50 dark:from-gray-900 dark:to-gray-800 flex items-center justify-center">
-                <div className="text-center">
-                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-pink-500 mx-auto"></div>
-                    <p className="mt-4 text-gray-600 dark:text-gray-400">Đang tải hồ sơ của bạn...</p>
+            <div
+                className="min-h-screen flex items-center justify-center"
+                style={{ background: "linear-gradient(135deg, #FFDEE9 0%, #B5FFFC 100%)" }}
+            >
+                <div className="relative">
+                    <div className="w-16 h-16 border-4 border-pink-400 border-t-transparent rounded-full animate-spin"></div>
                 </div>
             </div>
         );
     }
 
+    // --- ERROR STATE ---
     if (error || !profile) {
         return (
-            <div className="min-h-screen bg-gradient-to-br from-pink-50 to-red-50 dark:from-gray-900 dark:to-gray-800 flex items-center justify-center">
-                <div className="text-center max-w-md mx-auto p-8">
-                    <div className="w-24 h-24 bg-gradient-to-r from-red-500 to-pink-500 rounded-full flex items-center justify-center mx-auto mb-6">
-                        <span className="text-4xl">❌</span>
-                    </div>
-                    <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">Không tìm thấy hồ sơ</h2>
-                    <p className="text-gray-600 dark:text-gray-400 mb-6">{error || "Unable to load your profile."}</p>
-                    <button
-                        onClick={() => window.location.reload()}
-                        className="bg-gradient-to-r from-pink-500 to-red-500 text-white font-semibold py-3 px-6 rounded-full hover:from-pink-600 hover:to-red-600 transition-all duration-200"
-                    >
-                        Retry
+            <div className="min-h-screen flex items-center justify-center bg-gray-50">
+                <div className="text-center">
+                    <h2 className="text-2xl font-bold text-gray-800 mb-4">Có lỗi xảy ra</h2>
+                    <button onClick={() => window.location.reload()} className="px-6 py-2 bg-pink-500 text-white rounded-full">
+                        Thử lại
                     </button>
                 </div>
             </div>
         );
     }
 
+    // --- MAIN UI ---
     return (
-        <div className="min-h-screen bg-gradient-to-br from-pink-50 to-red-50 dark:from-gray-900 dark:to-gray-800">
+        <div
+            className="min-h-screen pb-20"
+            // 1. BACKGROUND THỐNG NHẤT
+            style={{ background: "linear-gradient(135deg, #FFDEE9 0%, #B5FFFC 100%)" }}
+        >
+            <style jsx global>{`
+        /* Ẩn thanh cuộn cho gallery nhưng vẫn scroll được */
+        .hide-scrollbar::-webkit-scrollbar {
+          display: none;
+        }
+        .hide-scrollbar {
+          -ms-overflow-style: none;
+          scrollbar-width: none;
+        }
+      `}</style>
+
             <div className="container mx-auto px-4 py-8">
-                <header className="text-center mb-8">
-                    <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">Hồ Sơ của Bạn</h1>
-                    <p className="text-gray-600 dark:text-gray-400">Quản lý hồ sơ và sở thích của bạn</p>
+
+                {/* Header - Màu chữ tối vì nền sáng */}
+                <header className="mb-8 flex items-center justify-between">
+                    <div>
+                        <h1 className="text-2xl font-extrabold text-slate-800 drop-shadow-sm">Hồ Sơ Của Tôi</h1>
+                        <p className="text-slate-600 text-sm font-medium">Hiển thị cách người khác nhìn thấy bạn</p>
+                    </div>
+                    {/* 2. ĐÃ BỎ NÚT CÀI ĐẶT Ở ĐÂY */}
                 </header>
 
-                <div className="max-w-4xl mx-auto">
-                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                        {/* Main Content Column */}
-                        <div className="lg:col-span-2 space-y-8">
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
 
-                            {/* Profile Card */}
-                            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-8">
-                                <div className="flex flex-col sm:flex-row items-center sm:items-start space-y-4 sm:space-y-0 sm:space-x-6 mb-8">
-                                    <div className="relative">
-                                        <div className="w-24 h-24 rounded-full overflow-hidden border-4 border-pink-100 dark:border-gray-700">
-                                            <img
-                                                src={profile.avatar_url || "/default-avatar.png"}
-                                                alt={profile.full_name}
-                                                className="w-full h-full object-cover"
-                                            />
+                    {/* --- CỘT TRÁI (MAIN INFO) - Chiếm 8/12 --- */}
+                    <div className="lg:col-span-8 space-y-6">
+
+                        {/* Card Hồ sơ chính */}
+                        <div className="bg-white/60 dark:bg-gray-800/60 backdrop-blur-xl rounded-[2rem] shadow-xl border border-white/50 p-6 sm:p-8 relative overflow-hidden group">
+
+                            {/* Decoration background light */}
+                            <div className="absolute top-0 right-0 -mt-10 -mr-10 w-40 h-40 bg-pink-400/20 rounded-full blur-3xl pointer-events-none"></div>
+
+                            <div className="flex flex-col sm:flex-row items-center sm:items-start gap-6 relative z-10">
+                                {/* Avatar Container */}
+                                <div className="relative">
+                                    <div className="w-28 h-28 sm:w-32 sm:h-32 rounded-full p-1 bg-gradient-to-tr from-pink-400 to-rose-400 shadow-lg">
+                                        <img
+                                            src={profile.avatar_url || "/default-avatar.png"}
+                                            alt={profile.full_name}
+                                            className="w-full h-full rounded-full object-cover border-4 border-white dark:border-gray-800"
+                                        />
+                                    </div>
+                                    {profile.is_verified && (
+                                        <div className="absolute bottom-1 right-1 bg-blue-500 text-white p-1.5 rounded-full border-2 border-white shadow-sm" title="Đã xác minh">
+                                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>
                                         </div>
-                                        {profile.is_verified && (
-                                            <div className="absolute bottom-0 right-0 bg-blue-500 text-white p-1 rounded-full border-2 border-white dark:border-gray-800" title="Verified User">
-                                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>
-                                            </div>
-                                        )}
-                                    </div>
-
-                                    <div className="flex-1 text-center sm:text-left">
-                                        <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-1">
-                                            {profile.full_name}, {profile.birthdate ? calculateAge(profile.birthdate) : "?"} tuổi
-                                        </h2>
-                                        <p className="text-gray-600 dark:text-gray-400 mb-1">@{profile.username}</p>
-
-                                        {/* Hiển thị Địa chỉ */}
-                                        {profile.display_address && (
-                                            <div className="flex items-center justify-center sm:justify-start text-sm text-gray-500 dark:text-gray-400 mb-2">
-                                                <span className="mr-1">📍</span>
-                                                {profile.display_address}
-                                            </div>
-                                        )}
-
-                                        <div className="flex items-center justify-center sm:justify-start space-x-2">
-                                            {!profile.is_profile_completed && (
-                                                <span className="bg-yellow-100 text-yellow-800 text-xs px-2 py-1 rounded-full">Hồ sơ chưa hoàn chỉnh</span>
-                                            )}
-                                            <span className="text-xs text-gray-400">
-                                                Đã tham gia {new Date(profile.created_at).toLocaleDateString()}
-                                            </span>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div className="space-y-6">
-                                    {/* Bio Section */}
-                                    <div>
-                                        <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-3">Giới thiệu về tôi</h3>
-                                        <p className="text-gray-600 dark:text-gray-400 leading-relaxed italic">
-                                            {profile.bio || "No bio added yet."}
-                                        </p>
-                                    </div>
-
-                                    {/* Hobbies Section - MỚI */}
-                                    <div>
-                                        <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-3">Niềm đam mê & sở thích</h3>
-                                        {profile.hobbies && profile.hobbies.length > 0 ? (
-                                            <div className="flex flex-wrap gap-2">
-                                                {profile.hobbies.map((hobby) => (
-                                                    <span
-                                                        key={hobby.id}
-                                                        className="inline-flex items-center px-3 py-1 rounded-full text-sm bg-pink-50 text-pink-700 dark:bg-gray-700 dark:text-pink-300 border border-pink-100 dark:border-gray-600"
-                                                    >
-                                                        <span className="mr-2">{hobby.icon}</span>
-                                                        {hobby.name}
-                                                    </span>
-                                                ))}
-                                            </div>
-                                        ) : (
-                                            <p className="text-gray-500 italic text-sm">Chưa chọn sở thích nào.</p>
-                                        )}
-                                    </div>
-
-                                    {/* Basic Info */}
-                                    <div>
-                                        <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-3">Thông tin cơ bản</h3>
-                                        <div className="grid grid-cols-2 gap-4">
-                                            <div>
-                                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Giới Tính</label>
-                                                <p className="text-gray-900 dark:text-white capitalize">
-                                                    {profile.gender === "male"
-                                                        ? "Nam"
-                                                        : profile.gender === "female"
-                                                            ? "Nữ"
-                                                            : "Khác"}
-                                                </p>
-                                            </div>
-                                            <div>
-                                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Sinh Nhật</label>
-                                                <p className="text-gray-900 dark:text-white">
-                                                    {profile.birthdate ? new Date(profile.birthdate).toLocaleDateString() : "Not set"}
-                                                </p>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    {/* --- THƯ VIỆN ẢNH (CAROUSEL CUỘN NGANG) --- */}
-                                    <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-6">
-                                        <div className="flex items-center justify-between mb-4">
-                                            <h3 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
-                                                📸 Thư viện ảnh
-                                                <span className="text-xs font-normal text-gray-500 bg-gray-100 dark:bg-gray-700 px-2 py-0.5 rounded-full">
-                                                    {profile.photos?.length || 0}/5
-                                                </span>
-                                            </h3>
-                                            {(!profile.photos || profile.photos.length === 0) && (
-                                                <Link href="/profile/edit" className="text-sm text-pink-500 hover:underline">
-                                                    + Thêm ảnh
-                                                </Link>
-                                            )}
-                                        </div>
-
-                                        {profile.photos && profile.photos.length > 0 ? (
-                                            // Container cuộn ngang
-                                            <div
-                                                className="flex gap-4 overflow-x-auto pb-4 snap-x snap-mandatory scroll-smooth"
-                                                style={{ scrollbarWidth: 'thin', scrollbarColor: '#CBD5E1 transparent' }} // Style scrollbar cho Firefox
-                                            >
-                                                {profile.photos.map((photo, index) => (
-                                                    <div
-                                                        key={index}
-                                                        // w-[30%] để hiện khoảng 3 ảnh, flex-none để không bị co lại
-                                                        className="flex-none w-[30%] min-w-[120px] aspect-[2/3] rounded-xl overflow-hidden shadow-md snap-center border border-gray-100 dark:border-gray-700 relative group"
-                                                    >
-                                                        <img
-                                                            src={photo}
-                                                            alt={`Gallery ${index}`}
-                                                            className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-                                                        />
-                                                        {/* Gradient mờ bên dưới để ảnh đẹp hơn */}
-                                                        <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                                                    </div>
-                                                ))}
-
-                                                {/* Nút giả cuối cùng để gợi ý bấm vào Edit nếu muốn thêm */}
-                                                {profile.photos.length < 5 && (
-                                                    <Link
-                                                        href="/profile/edit"
-                                                        className="flex-none w-[30%] min-w-[120px] aspect-[2/3] rounded-xl border-2 border-dashed border-gray-300 dark:border-gray-600 flex flex-col items-center justify-center text-gray-400 hover:text-pink-500 hover:border-pink-300 hover:bg-pink-50 dark:hover:bg-gray-700 transition-all snap-center"
-                                                    >
-                                                        <span className="text-2xl mb-1">+</span>
-                                                        <span className="text-xs font-medium">Thêm</span>
-                                                    </Link>
-                                                )}
-                                            </div>
-                                        ) : (
-                                            <div className="text-center py-8 bg-gray-50 dark:bg-gray-700/30 rounded-xl border border-dashed border-gray-200 dark:border-gray-700">
-                                                <p className="text-gray-500 text-sm mb-3">Bạn chưa có ảnh nào trong thư viện.</p>
-                                                <Link
-                                                    href="/profile/edit"
-                                                    className="px-4 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-sm shadow-sm hover:shadow-md transition-all"
-                                                >
-                                                    Tải ảnh lên ngay
-                                                </Link>
-                                            </div>
-                                        )}
-                                    </div>
-
-                                    {/* Preferences */}
-                                    <div>
-                                        <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-3">Sở thích hẹn hò</h3>
-                                        <div className="grid grid-cols-2 gap-4">
-                                            <div>
-                                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Độ tuổi</label>
-                                                <p className="text-gray-900 dark:text-white">
-                                                    {profile.preferences?.age_range?.min} - {profile.preferences?.age_range?.max} tuổi
-                                                </p>
-                                            </div>
-                                            <div>
-                                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Khoảng cách</label>
-                                                <p className="text-gray-900 dark:text-white">lên đến  {profile.preferences?.distance} km</p>
-                                            </div>
-                                            <div className="col-span-2">
-                                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Quan tâm đến</label>
-                                                <p className="text-gray-900 dark:text-white capitalize">
-
-                                                    {/* Kiểm tra và ép kiểu ngay tại chỗ */}
-                                                    {(profile.preferences as { gender_preference?: string[] })?.gender_preference?.length
-                                                        ? (profile.preferences as { gender_preference: string[] }).gender_preference
-                                                            .map((g) => GENDER_MAP[g] || g)
-                                                            .join(", ")
-                                                        : "Mọi người"}                                                </p>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Sidebar Actions */}
-                        <div className="space-y-6">
-                            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-6">
-                                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Quick Actions</h3>
-                                <div className="space-y-3">
-                                    <Link
-                                        href="/profile/edit"
-                                        className="flex items-center justify-between p-3 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors duration-200"
-                                    >
-                                        <div className="flex items-center space-x-3">
-                                            <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center">
-                                                <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                                                </svg>
-                                            </div>
-                                            <span className="text-gray-900 dark:text-white">Chỉnh sửa hồ sơ</span>
-                                        </div>
-                                        <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                                        </svg>
-                                    </Link>
-
-                                    {/* Button bổ sung thông tin nếu chưa hoàn thiện */}
-                                    {!profile.is_profile_completed && (
-                                        <Link
-                                            href="/onboarding"
-                                            className="flex items-center justify-between p-3 rounded-lg bg-yellow-50 hover:bg-yellow-100 dark:bg-yellow-900/20 dark:hover:bg-yellow-900/30 transition-colors duration-200"
-                                        >
-                                            <div className="flex items-center space-x-3">
-                                                <div className="w-8 h-8 bg-yellow-500 rounded-full flex items-center justify-center">
-                                                    <span className="text-white">⚠️</span>
-                                                </div>
-                                                <span className="text-gray-900 dark:text-white font-medium">Hoàn Thành Hồ Sơ</span>
-                                            </div>
-                                            <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                                            </svg>
-                                        </Link>
                                     )}
+                                    {/* 3. ĐÃ BỎ ONLINE STATUS DOT MÀU XANH Ở ĐÂY */}
                                 </div>
-                            </div>
 
-                            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-6">
-                                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Tài Khoản</h3>
-                                <div className="space-y-3">
-                                    <div className="flex flex-col items-center justify-between p-3 rounded-lg bg-gray-50 dark:bg-gray-700">
-                                        <span className="text-gray-900 dark:text-white">Tên người dùng</span>
-                                        <span className="text-gray-500 dark:text-gray-400">@{profile.username}</span>
+                                {/* Info */}
+                                <div className="flex-1 text-center sm:text-left">
+                                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                                        <div>
+                                            <h2 className="text-3xl font-extrabold text-slate-800 dark:text-white">
+                                                {profile.full_name}, <span className="font-light">{profile.birthdate ? calculateAge(profile.birthdate) : "??"} tuổi</span>
+                                            </h2>
+                                            <p className="text-pink-600 dark:text-pink-400 font-bold">@{profile.username}</p>
+                                        </div>
+
+                                        <Link href="/profile/edit" className="inline-flex items-center justify-center px-5 py-2 rounded-full bg-slate-800 text-white hover:bg-slate-900 hover:text-white dark:bg-white dark:text-slate-900 transition shadow-lg hover:-translate-y-0.5 transform font-medium">
+                                            <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
+                                            Chỉnh sửa
+                                        </Link>
                                     </div>
-                                    <div className="flex items-center justify-between p-3 rounded-lg bg-gray-50 dark:bg-gray-700">
-                                        <span className="text-gray-900 dark:text-white">Trạng thái</span>
-                                        <span className={`text-sm ${profile.is_online ? 'text-green-500' : 'text-gray-500'}`}>
-                                            {profile.is_online ? 'Online' : 'Offline'}
+
+                                    {profile.display_address && (
+                                        <div className="mt-3 flex items-center justify-center sm:justify-start text-slate-600 dark:text-gray-300 font-medium">
+                                            <span className="mr-1 text-red-500">📍</span> {profile.display_address}
+                                        </div>
+                                    )}
+
+                                    <div className="mt-4 flex flex-wrap gap-2 justify-center sm:justify-start">
+                                        {!profile.is_profile_completed ? (
+                                            <span className="px-3 py-1 rounded-lg bg-yellow-100 text-yellow-700 text-xs font-bold border border-yellow-200 shadow-sm">
+                                                ⚠️ Hồ sơ chưa hoàn tất
+                                            </span>
+                                        ) : (
+                                            <span className="px-3 py-1 rounded-lg bg-green-100 text-green-700 text-xs font-bold border border-green-200 shadow-sm">
+                                                ✅ Hồ sơ hoàn chỉnh
+                                            </span>
+                                        )}
+                                        <span className="px-3 py-1 rounded-lg bg-white/60 dark:bg-gray-700/50 text-slate-700 text-xs font-semibold shadow-sm">
+                                            Tham gia {new Date(profile.created_at).toLocaleDateString()}
                                         </span>
                                     </div>
                                 </div>
                             </div>
                         </div>
+
+                        {/* PHOTOS GALLERY */}
+                        <div className="bg-white/60 dark:bg-gray-800/60 backdrop-blur-xl rounded-[2rem] shadow-lg border border-white/50 p-6">
+                            <div className="flex items-center justify-between mb-4">
+                                <h3 className="text-xl font-bold text-slate-800 dark:text-white flex items-center gap-2">
+                                    📸 Thư viện ảnh
+                                </h3>
+                                <Link href="/profile/edit" className="text-sm font-bold text-pink-400 hover:text-pink-700 transition">
+                                    Quản lý
+                                </Link>
+                            </div>
+
+                            {profile.photos && profile.photos.length > 0 ? (
+                                <div className="flex gap-4 overflow-x-auto pb-2 hide-scrollbar snap-x snap-mandatory">
+                                    {profile.photos.map((photo, index) => (
+                                        <div key={index} className="flex-none w-40 aspect-[3/4] rounded-2xl overflow-hidden shadow-md snap-start border-[3px] border-white dark:border-gray-700 relative group cursor-pointer">
+                                            <img src={photo} alt={`Photo ${index}`} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" />
+                                        </div>
+                                    ))}
+                                    {profile.photos.length < 5 && (
+                                        <Link href="/profile/edit" className="flex-none w-40 aspect-[3/4] rounded-2xl border-2 border-dashed border-slate-300/60 flex flex-col items-center justify-center text-slate-500 hover:bg-white/40 transition snap-start group">
+                                            <div className="w-10 h-10 rounded-full bg-white dark:bg-gray-700 flex items-center justify-center group-hover:bg-pink-100 group-hover:text-pink-600 transition shadow-sm">
+                                                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
+                                            </div>
+                                            <span className="text-xs font-bold mt-2">Thêm ảnh</span>
+                                        </Link>
+                                    )}
+                                </div>
+                            ) : (
+                                <div className="text-center py-10 bg-white/30 rounded-2xl border border-dashed border-slate-300">
+                                    <p className="text-slate-500 font-medium">Chưa có ảnh nào.</p>
+                                    <Link href="/profile/edit" className="text-pink-600 font-bold hover:underline">Tải lên ngay</Link>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* BIO & HOBBIES GRID */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            {/* Bio */}
+                            <div className="bg-white/60 dark:bg-gray-800/60 backdrop-blur-xl rounded-[2rem] shadow-lg border border-white/50 p-6">
+                                <h3 className="text-lg font-bold text-slate-800 dark:text-white mb-3">📝 Giới thiệu</h3>
+                                <p className="text-slate-600 dark:text-gray-300 leading-relaxed italic font-medium">
+                                    {profile.bio || "Người dùng này khá kín tiếng, chưa viết gì cả..."}
+                                </p>
+                            </div>
+
+                            {/* Hobbies */}
+                            <div className="bg-white/60 dark:bg-gray-800/60 backdrop-blur-xl rounded-[2rem] shadow-lg border border-white/50 p-6">
+                                <h3 className="text-lg font-bold text-slate-800 dark:text-white mb-3">🎵 Sở thích</h3>
+                                {profile.hobbies && profile.hobbies.length > 0 ? (
+                                    <div className="flex flex-wrap gap-2">
+                                        {profile.hobbies.map((hobby) => (
+                                            <span key={hobby.id} className="inline-flex items-center px-3 py-1.5 rounded-full text-sm bg-white/70 text-pink-700 dark:text-pink-400 border border-pink-100 font-semibold shadow-sm">
+                                                <span className="mr-1.5">{hobby.icon}</span> {hobby.name}
+                                            </span>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <p className="text-slate-500 text-sm font-medium">Chưa chọn sở thích.</p>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* --- CỘT PHẢI (SIDEBAR) - Chiếm 4/12 --- */}
+                    <div className="lg:col-span-4 space-y-6">
+
+                        {/* Preferences Card */}
+                        <div className="bg-white/70 dark:bg-gray-800/80 backdrop-blur-xl rounded-[2rem] shadow-lg border border-white/50 p-6">
+                            <h3 className="text-lg font-bold text-slate-800 dark:text-white mb-4 flex items-center">
+                                <span className="bg-orange-100 text-orange-600 p-1.5 rounded-lg mr-2 shadow-sm">🎯</span>
+                                Gu hẹn hò
+                            </h3>
+                            <div className="space-y-4">
+                                <div className="flex justify-between items-center pb-2 border-b border-slate-100 dark:border-gray-700">
+                                    <span className="text-slate-400 text-sm font-medium">Độ tuổi</span>
+                                    <span className="font-bold text-slate-800 dark:text-white">
+                                        {profile.preferences?.age_range?.min} - {profile.preferences?.age_range?.max}
+                                    </span>
+                                </div>
+                                <div className="flex justify-between items-center pb-2 border-b border-slate-100 dark:border-gray-700">
+                                    <span className="text-slate-400 text-sm font-medium">Khoảng cách</span>
+                                    <span className="font-bold text-slate-800 dark:text-white">
+                                        {profile.preferences?.distance} km
+                                    </span>
+                                </div>
+                                <div className="flex justify-between items-center">
+                                    <span className="text-slate-400 text-sm font-medium">Giới tính</span>
+                                    <span className="font-bold text-slate-800 dark:text-white capitalize text-right">
+                                        {(profile.preferences as { gender_preference?: string[] })?.gender_preference?.length
+                                            ? (profile.preferences as { gender_preference: string[] }).gender_preference.map((g) => GENDER_MAP[g] || g).join(", ")
+                                            : "Mọi người"}
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Basic Info Card */}
+                        <div className="bg-white/70 dark:bg-gray-800/80 backdrop-blur-xl rounded-[2rem] shadow-lg border border-white/50 p-6">
+                            <h3 className="text-lg font-bold text-slate-800 dark:text-white mb-4 flex items-center">
+                                <span className="bg-blue-100 text-blue-600 p-1.5 rounded-lg mr-2 shadow-sm">ℹ️</span>
+                                Thông tin cơ bản
+                            </h3>
+                            <div className="space-y-4">
+                                <div className="flex justify-between">
+                                    <span className="text-slate-400 text-sm font-medium">Giới tính</span>
+                                    <span className="font-bold text-slate-800 dark:text-white">{GENDER_MAP[profile.gender] || profile.gender}</span>
+                                </div>
+                                <div className="flex justify-between">
+                                    <span className="text-slate-400 text-sm font-medium">Sinh nhật</span>
+                                    <span className="font-bold text-slate-800 dark:text-white">{profile.birthdate ? new Date(profile.birthdate).toLocaleDateString('vi-VN') : "Chưa cập nhật"}</span>
+                                </div>
+                                {/* 4. THAY CUNG HOÀNG ĐẠO BẰNG EMAIL */}
+                                <div className="flex justify-between">
+                                    <span className="text-slate-400 text-sm font-medium">Email</span>
+                                    <span className="font-bold text-slate-800 dark:text-white truncate max-w-[150px]" title={profile.email}>{profile.email}</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Action Box */}
+                        {!profile.is_profile_completed && (
+                            <div className="bg-gradient-to-r from-yellow-400 to-orange-500 rounded-[2rem] shadow-lg p-6 text-white text-center">
+                                <h3 className="font-bold text-lg mb-2">Hoàn thiện hồ sơ ngay!</h3>
+                                <p className="text-white/90 text-sm mb-4 font-medium">Hồ sơ đầy đủ giúp bạn tăng 70% cơ hội tương hợp.</p>
+                                <Link href="/onboarding" className="inline-block w-full py-2.5 bg-white text-orange-600 font-bold rounded-xl shadow hover:bg-gray-50 transition">
+                                    Cập nhật ngay
+                                </Link>
+                            </div>
+                        )}
+
                     </div>
                 </div>
             </div>

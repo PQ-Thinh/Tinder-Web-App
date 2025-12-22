@@ -1,7 +1,9 @@
 "use server";
 
-import { Hobby, UserProfile } from "@/lib/actions/profile"; // Import type chuẩn từ file profile
+import { Hobby, UserProfile } from "@/lib/actions/profile";
 import { createClient } from "../supabase/sever";
+import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 
 // Cấu trúc Preferences trong JSONB
 interface UserPreferences {
@@ -252,15 +254,54 @@ export async function getUserMatches(): Promise<UserProfile[]> {
 
   return matchedProfiles;
 }
+export async function unmatchUser(targetUserId: string) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
 
-// 4. LẤY BẢNG XẾP HẠNG (Top những người được thích nhiều nhất toàn hệ thống)
-export async function getLeaderboard() {
+  if (!user) {
+    throw new Error("Unauthorized");
+  }
+
+  try {
+    const { error } = await supabase
+      .from('matches')
+      .update({ is_active: false }) // Đánh dấu là không còn active nữa
+      .or(`and(user1_id.eq.${user.id},user2_id.eq.${targetUserId}),and(user1_id.eq.${targetUserId},user2_id.eq.${user.id})`);
+
+    if (error) throw error;
+
+    // Refresh lại cache
+    revalidatePath('/matches');
+    revalidatePath('/chat');
+
+    return { success: true };
+  } catch (error) {
+    console.error("Error unmatching:", error);
+    return { success: false, error: "Không thể bỏ ghép đôi. Vui lòng thử lại." };
+  }
+}
+
+// Kiểu dữ liệu thô trả về từ query Supabase
+interface RawLeaderboardEntry {
+  id: string;
+  full_name: string | null;
+  avatar_url: string | null;
+  // Supabase trả về alias count dưới dạng mảng object
+  like_count: { count: number }[] | null;
+}
+
+// Kiểu dữ liệu trả về cho UI
+export interface LeaderboardUser {
+  id: string;
+  full_name: string | null;
+  avatar_url: string | null;
+  like_count: number;
+}
+
+// 4. LẤY BẢNG XẾP HẠNG
+export async function getLeaderboard(): Promise<LeaderboardUser[]> {
   const supabase = await createClient();
 
-  // Giải thích logic query:
-  // 1. users(*) : Lấy thông tin user
-  // 2. like_count: likes!to_user_id(count) : Đếm số lần user này xuất hiện ở cột 'to_user_id' trong bảng likes
-  // 3. order('like_count', { foreignTable: 'likes', ascending: false }) : Sắp xếp theo số lượng đếm được
   const { data, error } = await supabase
     .from("users")
     .select(`
@@ -268,27 +309,28 @@ export async function getLeaderboard() {
       full_name,
       avatar_url,
       like_count: likes!to_user_id(count)
-    `)
-    // Mặc định Supabase không cho order trực tiếp trên kết quả count một cách đơn giản ở tầng select
-    // Nên chúng ta vẫn sẽ lấy data và thực hiện sort để đảm bảo logic Ranking chính xác nhất.
-  
+    `);
+
   if (error) {
     console.error("Leaderboard error:", error);
     return [];
   }
 
+  // Ép kiểu data thô sang Interface đã định nghĩa
+  const rawData = data as unknown as RawLeaderboardEntry[];
+
   // Chuyển đổi dữ liệu về dạng phẳng và Sort
-  const sortedLeaderboard = data
-    .map((u: any) => ({
+  const sortedLeaderboard = rawData
+    .map((u) => ({
       id: u.id,
       full_name: u.full_name,
       avatar_url: u.avatar_url,
-      // Supabase trả về mảng [{count: x}] cho alias này
+      // Truy cập an toàn vào mảng count
       like_count: u.like_count?.[0]?.count || 0,
     }))
-    // Sắp xếp: Ai có like_count lớn nhất đứng đầu (vị trí index 0)
+    // Sắp xếp: Ai có like_count lớn nhất đứng đầu
     .sort((a, b) => b.like_count - a.like_count)
-    .slice(0, 10); // Lấy Top 10 người đứng đầu
+    .slice(0, 10);
 
   return sortedLeaderboard;
 }
