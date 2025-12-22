@@ -1,7 +1,8 @@
+import { de } from '@faker-js/faker'
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
-export async function middleware(request: NextRequest) {
+export default async function proxy(request: NextRequest) {
     let response = NextResponse.next({
         request: {
             headers: request.headers,
@@ -31,23 +32,19 @@ export async function middleware(request: NextRequest) {
         }
     )
 
-    // ⚠️ Quan trọng: getUser() sẽ validate session và refresh cookie nếu cần
     const { data: { user } } = await supabase.auth.getUser()
 
     // 1. CHẶN NGƯỜI DÙNG CHƯA ĐĂNG NHẬP
-    // Nếu không có user và không ở trang auth -> Đẩy về /auth
     if (!user && !request.nextUrl.pathname.startsWith('/auth')) {
         return NextResponse.redirect(new URL('/auth', request.url))
     }
 
     // 2. LOGIC PROFILE (Chỉ chạy khi đã login)
     if (user) {
-        // Nếu user đã login mà cố vào /auth -> Đẩy về trang chủ
         if (request.nextUrl.pathname.startsWith('/auth')) {
             return NextResponse.redirect(new URL('/', request.url))
         }
 
-        // Kiểm tra hoàn thiện hồ sơ
         const { data: userProfile } = await supabase
             .from('users')
             .select('is_profile_completed')
@@ -58,7 +55,6 @@ export async function middleware(request: NextRequest) {
         const isEditingProfile = request.nextUrl.pathname === '/profile/edit'
         const isStaticAsset = request.nextUrl.pathname.match(/\.(png|jpg|jpeg|gif|svg|ico|css|js)$/)
 
-        // Nếu chưa xong hồ sơ -> Bắt buộc ở trang Edit
         if (!isCompleted && !isEditingProfile && !isStaticAsset) {
             return NextResponse.redirect(new URL('/profile/edit', request.url))
         }
