@@ -16,7 +16,6 @@ import {
   useMediaQuery,
   Button,
   Card,
-  Stack,
 } from "@mui/material";
 
 import gsap from "gsap";
@@ -47,7 +46,7 @@ export default function MatchesPage() {
 
   const [swipeDirection, setSwipeDirection] = useState<string | null>(null);
 
-  // --- Logic Load Data ---
+  // --- Logic Load Data (GIỮ NGUYÊN) ---
   useEffect(() => {
     async function loadUsers() {
       try {
@@ -62,7 +61,7 @@ export default function MatchesPage() {
     loadUsers();
   }, []);
 
-  // --- GSAP Draggable ---
+  // --- GSAP Draggable (GIỮ NGUYÊN) ---
   useLayoutEffect(() => {
     if (loading || currentIndex >= potentialMatches.length || !cardRef.current)
       return;
@@ -71,10 +70,8 @@ export default function MatchesPage() {
     const likeOverlay = likeOverlayRef.current;
     const nopeOverlay = nopeOverlayRef.current;
 
-    // Reset trạng thái thẻ mỗi khi render lại (Card mới)
     gsap.set(card, { x: 0, y: 0, rotation: 0, opacity: 1, scale: 1 });
 
-    // Animation Card mới xuất hiện
     gsap.from(card, {
       scale: 0.95,
       y: 20,
@@ -86,7 +83,6 @@ export default function MatchesPage() {
     const draggable = Draggable.create(card, {
       type: "x,y",
       edgeResistance: 0.65,
-      // bounds: containerRef.current, // Tắt bounds để thẻ bay thoải mái
       inertia: true,
       onDrag: function () {
         const x = this.x;
@@ -203,23 +199,8 @@ export default function MatchesPage() {
 
   if (loading) {
     return (
-      <Box
-        sx={{
-          height: "100vh",
-          display: "flex",
-          justifyContent: "center",
-          alignItems: "center",
-          background: "linear-gradient(135deg, #f0f0f0 0%, #ffffff 100%)",
-        }}
-      >
-        <Stack spacing={2} alignItems="center">
-          <Skeleton
-            variant="rectangular"
-            width={isMobile ? "90vw" : 400}
-            height={isMobile ? "60vh" : 500}
-            sx={{ borderRadius: 4 }}
-          />
-        </Stack>
+      <Box sx={{ height: "100vh", display: "flex", justifyContent: "center", alignItems: "center", background: "#f0f0f0" }}>
+        <Skeleton variant="rectangular" width={isMobile ? "90vw" : 400} height={isMobile ? "60vh" : 500} sx={{ borderRadius: 4 }} />
       </Box>
     );
   }
@@ -275,53 +256,47 @@ export default function MatchesPage() {
     <Box
       ref={containerRef}
       sx={{
-        // Sử dụng minHeight để mobile có thể cuộn xuống xem BXH bên dưới
-        minHeight: "100vh",
+        // --- SỬA LỖI MOBILE ---
+        // Trên Desktop dùng fixed, trên Mobile để scroll tự nhiên để không bị cắt content
+        position: { xs: "relative", lg: "fixed" },
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
         width: "100%",
+        height: { xs: "auto", lg: "100vh" },
+        minHeight: "100vh",
         display: "flex",
-        // QUAN TRỌNG: Mobile là column (dọc), Desktop là row (ngang)
         flexDirection: { xs: "column", lg: "row" },
-        alignItems: "center",
-        justifyContent: "center", // Căn giữa nội dung khi chuyển sang cột
         overflowX: "hidden",
-        overflowY: "auto",
-        position: "relative",
+        overflowY: { xs: "auto", lg: "hidden" }, // Mobile cho cuộn trang, Desktop khóa cứng
         background: "linear-gradient(135deg, #FFDEE9 0%, #B5FFFC 100%)",
-        px: { lg: 6, xl: 10 },
-        py: { xs: 4, lg: 0 }, // Thêm padding trên dưới cho mobile để không sát mép
-        gap: { xs: 4, lg: 4, xl: 6 },
       }}
     >
-      {/* --- CỘT CHÍNH: MATCH AREA --- */}
+      {/* --- CỘT MATCH (Lên trên đầu ở Mobile) --- */}
       <Box
         sx={{
-          flex: { lg: 1 },
+          flex: { xs: "none", lg: 1 },
           display: "flex",
           justifyContent: "center",
           alignItems: "center",
-          height: { lg: "100%" },
-          zIndex: 10,
-          // Force Match Area lên trên cùng ở mobile
           order: { xs: 1, lg: 2 },
+          height: { xs: "auto", lg: "100%" },
+          py: { xs: 4, lg: 0 }, // Thêm padding ở mobile cho thoáng
         }}
       >
         <Box
           sx={{
             position: "relative",
             width: { xs: "90vw", sm: 380, md: 400 },
-            height: 650,
+            // Mobile dùng chiều cao dựa trên content (MatchCard), Desktop dùng % màn hình
+            height: { xs: "550px", sm: "600px", lg: "85vh" },
             display: "flex",
             flexDirection: "column",
           }}
         >
-          <Box
-            sx={{
-              position: "relative",
-              flexGrow: 1,
-              width: "100%",
-              zIndex: 20,
-            }}
-          >
+          {/* Card Stack Area */}
+          <Box sx={{ position: "relative", flexGrow: 1, zIndex: 20 }}>
             {currentIndex + 1 < potentialMatches.length && (
               <Box
                 sx={{
@@ -332,7 +307,6 @@ export default function MatchesPage() {
                   transform: "scale(0.95) translateY(10px)",
                   opacity: 1,
                   overflow: "hidden",
-                  boxShadow: "0 4px 20px rgba(0,0,0,0.1)",
                   pointerEvents: "none",
                 }}
               >
@@ -352,47 +326,17 @@ export default function MatchesPage() {
               }}
             >
               <MatchCard user={currentPotentialMatch} />
-              <Box
-                ref={likeOverlayRef}
-                sx={{
-                  position: "absolute",
-                  top: 40,
-                  left: 40,
-                  border: "4px solid #4CAF50",
-                  borderRadius: 2,
-                  padding: "4px 12px",
-                  transform: "rotate(-15deg)",
-                  opacity: 0,
-                  pointerEvents: "none",
-                  zIndex: 40,
-                }}
-              >
-                <Typography variant="h4" fontWeight={900} color="#4CAF50">
-                  LIKE
-                </Typography>
+              {/* Overlays (Like/Nope) */}
+              <Box ref={likeOverlayRef} sx={{ position: "absolute", top: 40, left: 40, border: "4px solid #4CAF50", borderRadius: 2, padding: "4px 12px", transform: "rotate(-15deg)", opacity: 0, pointerEvents: "none", zIndex: 40 }}>
+                <Typography variant="h4" fontWeight={900} color="#4CAF50">LIKE</Typography>
               </Box>
-              <Box
-                ref={nopeOverlayRef}
-                sx={{
-                  position: "absolute",
-                  top: 40,
-                  right: 40,
-                  border: "4px solid #F44336",
-                  borderRadius: 2,
-                  padding: "4px 12px",
-                  transform: "rotate(15deg)",
-                  opacity: 0,
-                  pointerEvents: "none",
-                  zIndex: 40,
-                }}
-              >
-                <Typography variant="h4" fontWeight={900} color="#F44336">
-                  NOPE
-                </Typography>
+              <Box ref={nopeOverlayRef} sx={{ position: "absolute", top: 40, right: 40, border: "4px solid #F44336", borderRadius: 2, padding: "4px 12px", transform: "rotate(15deg)", opacity: 0, pointerEvents: "none", zIndex: 40 }}>
+                <Typography variant="h4" fontWeight={900} color="#F44336">NOPE</Typography>
               </Box>
             </Box>
           </Box>
 
+          {/* Hàng nút bấm */}
           <Box
             sx={{
               height: 100,
@@ -400,7 +344,7 @@ export default function MatchesPage() {
               alignItems: "center",
               justifyContent: "center",
               zIndex: 50,
-              mt: 2,
+              flexShrink: 0,
             }}
           >
             <MatchButtons
@@ -413,34 +357,28 @@ export default function MatchesPage() {
         </Box>
       </Box>
 
-      {/* --- CỘT BÊN TRÁI: LEADERBOARD (Nằm dưới Match ở mobile) --- */}
+      {/* --- CỘT BẢNG XẾP HẠNG (Nằm dưới Match ở Mobile) --- */}
       <Box
         sx={{
-          zIndex: 10,
+          width: { xs: "100%", lg: 450, xl: 500 },
+          // Mobile: cao theo nội dung và cho phép cuộn trang, Desktop: 100% màn hình và cuộn nội bộ
+          height: { xs: "auto", lg: "100%" },
           flexShrink: 0,
-          // Ở mobile nằm thứ 2 (dưới), ở desktop nằm trước Match
           order: { xs: 2, lg: 1 },
+          bgcolor: { lg: "rgba(255, 255, 255, 0.2)" },
+          backdropFilter: { lg: "blur(20px)" },
+          borderRight: { lg: "1px solid rgba(255, 255, 255, 0.3)" },
+          // Chỉ hiện scroll nội bộ trên Desktop
+          overflowY: { lg: "auto" },
+          "&::-webkit-scrollbar": { display: "none" },
+          msOverflowStyle: "none",
+          scrollbarWidth: "none",
         }}
       >
-        <Box
-          sx={{
-            width: { xs: "90vw", sm: 450, lg: 450, xl: 500 },
-            height: 550,
-            bgcolor: "rgba(255, 255, 255, 0.4)",
-            backdropFilter: "blur(20px)",
-            borderRadius: "28px",
-            border: "1px solid rgba(255, 255, 255, 0.6)",
-            boxShadow: "0 15px 35px rgba(0,0,0,0.05)",
-            display: "flex",
-            flexDirection: "column",
-            overflow: "hidden",
-            p: 1,
-            // Desktop thì đẩy lên, Mobile thì để tự nhiên và cách đáy 1 chút
-            mt: { lg: "-100px" },
-            mb: { xs: 4, lg: 0 },
-          }}
-        >
+        <Box sx={{ p: { xs: 2, lg: 3 }, pb: 10 }}>
           <Leaderboard />
+          {/* Padding dưới cùng để mobile không bị sát mép */}
+          <Box sx={{ height: 50, display: { lg: "none" } }} />
         </Box>
       </Box>
 
