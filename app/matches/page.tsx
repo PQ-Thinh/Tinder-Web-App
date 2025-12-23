@@ -45,6 +45,8 @@ export default function MatchesPage() {
   const nopeOverlayRef = useRef<HTMLDivElement>(null);
 
   const [swipeDirection, setSwipeDirection] = useState<string | null>(null);
+  const NAVBAR_HEIGHT = 70;
+
 
   // --- Logic Load Data (GIỮ NGUYÊN) ---
   useEffect(() => {
@@ -60,6 +62,7 @@ export default function MatchesPage() {
     }
     loadUsers();
   }, []);
+
 
   // --- GSAP Draggable (GIỮ NGUYÊN) ---
   useLayoutEffect(() => {
@@ -256,20 +259,22 @@ export default function MatchesPage() {
     <Box
       ref={containerRef}
       sx={{
-        // --- SỬA LỖI MOBILE ---
-        // Trên Desktop dùng fixed, trên Mobile để scroll tự nhiên để không bị cắt content
         position: { xs: "relative", lg: "fixed" },
-        top: 0,
+        top: { lg: `${NAVBAR_HEIGHT}px` }, // 👈 đẩy xuống dưới navbar
         left: 0,
         right: 0,
-        bottom: 0,
+
         width: "100%",
-        height: { xs: "auto", lg: "100vh" },
-        minHeight: "100vh",
+        height: {
+          xs: "auto",
+          lg: `calc(100vh - ${NAVBAR_HEIGHT}px)`,
+        },
+
         display: "flex",
         flexDirection: { xs: "column", lg: "row" },
         overflowX: "hidden",
-        overflowY: { xs: "auto", lg: "hidden" }, // Mobile cho cuộn trang, Desktop khóa cứng
+        overflowY: { xs: "auto", lg: "hidden" },
+
         background: "linear-gradient(135deg, #FFDEE9 0%, #B5FFFC 100%)",
       }}
     >
@@ -362,11 +367,14 @@ export default function MatchesPage() {
         sx={{
           width: { xs: "100%", lg: 450, xl: 500 },
           // Mobile: cao theo nội dung và cho phép cuộn trang, Desktop: 100% màn hình và cuộn nội bộ
-          height: { xs: "auto", lg: "100%" },
+          height: {
+            lg: `calc(100vh  ${NAVBAR_HEIGHT}px)`,
+          },
           flexShrink: 0,
           order: { xs: 2, lg: 1 },
-          bgcolor: { lg: "rgba(255, 255, 255, 0.2)" },
+          bgcolor: { lg: "rgba(255, 255, 255, 0.65)" },
           backdropFilter: { lg: "blur(20px)" },
+          boxShadow: { lg: "10px 0 30px rgba(0,0,0,0.05)" },
           borderRight: { lg: "1px solid rgba(255, 255, 255, 0.3)" },
           // Chỉ hiện scroll nội bộ trên Desktop
           overflowY: { lg: "auto" },
@@ -375,10 +383,11 @@ export default function MatchesPage() {
           scrollbarWidth: "none",
         }}
       >
-        <Box sx={{ p: { xs: 2, lg: 3 }, pb: 10 }}>
+        <Box
+          sx={{ p: { xs: 2, lg: 3 }, pb: { xs: 14, lg: 6 } }}>
           <Leaderboard />
           {/* Padding dưới cùng để mobile không bị sát mép */}
-          <Box sx={{ height: 50, display: { lg: "none" } }} />
+          {/* <Box sx={{ height: 50, display: { lg: "none" } }} /> */}
         </Box>
       </Box>
 
