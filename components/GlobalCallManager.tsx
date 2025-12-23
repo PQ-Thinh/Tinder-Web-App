@@ -10,7 +10,7 @@ interface VideoCallCustomData extends Record<string, unknown> {
   call_id?: string;
   caller_id?: string;
   caller_name?: string;
-  caller_image?: string; // <-- Đọc trường này
+  caller_image?: string;
   text?: string;
 }
 
@@ -18,21 +18,38 @@ export default function GlobalCallManager() {
   const [incomingCallId, setIncomingCallId] = useState<string>("");
   const [callerId, setCallerId] = useState<string>("");
   const [callerName, setCallerName] = useState<string>("");
-  const [callerImage, setCallerImage] = useState<string>(""); // <-- State lưu ảnh
+  const [callerImage, setCallerImage] = useState<string>("");
   const [showIncomingCall, setShowIncomingCall] = useState(false);
-  
+
   const [activeCallId, setActiveCallId] = useState<string>("");
   const [showActiveCall, setShowActiveCall] = useState(false);
-  
+
   const [client, setClient] = useState<StreamChat | null>(null);
 
   useEffect(() => {
-    let chatClient: StreamChat;
+    let chatClient: StreamChat | null = null;
+
+    // 1. Khai báo handler ở scope của useEffect để cleanup function có thể gọi được
+    const handleNewEvent = (event: Event) => {
+      if (event.message?.text?.includes("📹 Video call invitation")) {
+        const customData = event.message as unknown as VideoCallCustomData;
+        // Lưu ý: Lúc này chatClient đã được gán giá trị ở init
+        const currentUserId = chatClient?.userID;
+
+        if (customData.caller_id && customData.caller_id !== currentUserId) {
+          setIncomingCallId(customData.call_id || "");
+          setCallerId(customData.caller_id);
+          setCallerName(customData.caller_name || event.user?.name || "Ai đó");
+          setCallerImage(customData.caller_image || event.user?.image || "");
+          setShowIncomingCall(true);
+        }
+      }
+    };
 
     async function initGlobalListener() {
       try {
         const { token, userId, userName, userImage } = await getStreamUserToken();
-        
+
         if (!userId) return;
 
         chatClient = StreamChat.getInstance(process.env.NEXT_PUBLIC_STREAM_API_KEY!);
@@ -48,24 +65,7 @@ export default function GlobalCallManager() {
           );
         }
 
-        const handleNewEvent = (event: Event) => {
-          if (event.message?.text?.includes("📹 Video call invitation")) {
-            const customData = event.message as unknown as VideoCallCustomData;
-            const currentUserId = chatClient?.userID;
-
-            if (customData.caller_id && customData.caller_id !== currentUserId) {
-              setIncomingCallId(customData.call_id || "");
-              setCallerId(customData.caller_id);
-
-              // CẬP NHẬT: Lấy ảnh từ customData trước, nếu không có thì fallback sang event.user
-              setCallerName(customData.caller_name || event.user?.name || "Ai đó");
-              setCallerImage(customData.caller_image || event.user?.image || "");
-
-              setShowIncomingCall(true);
-            }
-          }
-        };
-
+        // 2. Đăng ký sự kiện
         chatClient.on("notification.message_new", handleNewEvent);
         chatClient.on("message.new", handleNewEvent);
 
@@ -77,19 +77,18 @@ export default function GlobalCallManager() {
 
     initGlobalListener();
 
+    // 3. Cleanup: Hủy đúng hàm handler đã đăng ký
     return () => {
       if (chatClient) {
-        chatClient.off("notification.message_new");
-        chatClient.off("message.new");
+        chatClient.off("notification.message_new", handleNewEvent);
+        chatClient.off("message.new", handleNewEvent);
       }
     };
   }, []);
 
   const handleAcceptCall = async () => {
-    // Send acceptance message to caller first
     if (client && incomingCallId) {
       try {
-        // Calculate channelId same way as server
         const currentUserId = client.userID!;
         const otherUserId = callerId;
 
@@ -104,11 +103,8 @@ export default function GlobalCallManager() {
         }
 
         const channelId = `match_${Math.abs(hash).toString(36)}`;
-
-        // Get or create the channel
         const channel = client.channel("messaging", channelId);
 
-        // Send acceptance message
         const acceptanceData = {
           text: `📹 Call accepted - joining now`,
           call_id: incomingCallId,
@@ -124,7 +120,6 @@ export default function GlobalCallManager() {
     }
 
     setShowIncomingCall(false);
-    // Join the call immediately for receiver
     setActiveCallId(incomingCallId);
     setShowActiveCall(true);
 
@@ -157,9 +152,8 @@ export default function GlobalCallManager() {
           <div className="bg-white dark:bg-gray-800 rounded-2xl p-8 max-w-sm mx-4 shadow-2xl animate-pulse-fade border border-gray-200 dark:border-gray-700">
             <div className="text-center">
               <div className="w-20 h-20 rounded-full overflow-hidden mx-auto mb-4 border-4 border-pink-500 relative">
-                 {/* Hiển thị ảnh Caller */}
-                 <img
-                  src={callerImage || "/default-avatar.png"} 
+                <img
+                  src={callerImage || "/default-avatar.png"}
                   alt={callerName}
                   className="w-full h-full object-cover"
                   onError={(e) => {
@@ -199,7 +193,7 @@ export default function GlobalCallManager() {
             callId={activeCallId}
             onCallEnd={handleCallEnd}
             isIncoming={true}
-            otherUserId={callerName} // Pass caller name for reference
+            otherUserId={callerName}
           />
         </div>
       )}
