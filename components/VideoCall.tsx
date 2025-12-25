@@ -1,8 +1,12 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState } from "react";
 import {
   Call,
+  // Thay đổi: Import các nút riêng lẻ thay vì CallControls
+  ToggleAudioPublishingButton,
+  ToggleVideoPublishingButton,
+  CancelCallButton,
   CallControls,
   PaginatedGridLayout,
   StreamCall,
@@ -10,7 +14,6 @@ import {
   StreamVideo,
   StreamVideoClient,
 } from "@stream-io/video-react-sdk";
-import { Subscription } from 'rxjs'; // Import Subscription type if available, or use a generic type
 
 import "@stream-io/video-react-sdk/dist/css/styles.css";
 import { getStreamVideoToken } from "@/lib/actions/stream";
@@ -34,25 +37,18 @@ export default function VideoCall({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [hasJoined, setHasJoined] = useState(false);
-  const [showCallEnded, setShowCallEnded] = useState(false);
+  const [userInitiatedLeave, setUserInitiatedLeave] = useState(false);
   const [participantCount, setParticipantCount] = useState(0);
-
-  // Memoize PaginatedGridLayout to prevent infinite re-renders
-  const gridLayout = useMemo(() => <PaginatedGridLayout />, []);
 
   useEffect(() => {
     let isMounted = true;
-    // Subscriptions for cleanup
-    let callStateSubscription: Subscription | undefined;
-    let participantSubscription: Subscription | undefined;
-    let currentCall: Call | undefined;
-    let currentClient: StreamVideoClient | undefined;
 
     async function initializeVideoCall() {
       if (hasJoined) return;
 
       try {
         setError(null);
+        // setLoading(true); // Có thể bật lại nếu muốn hiện loading mỗi lần
 
         const { token, userId, userName, userImage } = await getStreamVideoToken();
 
@@ -67,15 +63,15 @@ export default function VideoCall({
           },
           token,
         });
-        currentClient = videoClient;
 
         if (!isMounted) return;
 
         const videoCall = videoClient.call("default", callId);
-        currentCall = videoCall;
 
+        // Luôn dùng create: true để đảm bảo call tồn tại
         await videoCall.join({ create: true });
 
+        // Tự động bật cam/mic
         try {
           await videoCall.camera.enable();
           await videoCall.microphone.enable();
@@ -89,38 +85,44 @@ export default function VideoCall({
         setCall(videoCall);
         setHasJoined(true);
 
-        // Listen for call state changes
-        callStateSubscription = videoCall.state.callingState$.subscribe((callingState) => {
+        // Listen for call state changes to detect when call ends
+        const callStateUnsubscribe = videoCall.state.callingState$.subscribe((callingState) => {
           console.log('Call state changed:', callingState);
 
-          if (callingState === 'left' && !showCallEnded) {
+          // When call ends (left the call)
+          if (callingState === 'left') {
             console.log('Call ended, checking participants...');
+            // Small delay to let participant list update
             setTimeout(() => {
               const participants = videoCall.state.participants;
               console.log('Participants after call end:', participants.length);
               if (participants.length <= 1) {
                 console.log('Call ended by other participant or server');
-                setShowCallEnded(true);
+                onCallEnd();
               }
             }, 500);
           }
         });
 
-        // Listen for participant count changes
-        let prevParticipantCount = 0;
-        participantSubscription = videoCall.state.participants$.subscribe((participants) => {
-          console.log('Participants updated:', participants.length, 'previous:', prevParticipantCount);
+        // Also listen for participant count changes as backup
+        let participantCount = 0;
+        const participantUnsubscribe = videoCall.state.participants$.subscribe((participants) => {
+          console.log('Participants updated:', participants.length, 'previous:', participantCount);
 
+          // Update participant count state
           setParticipantCount(participants.length);
 
-          if (prevParticipantCount >= 2 && participants.length === 1 && !showCallEnded) {
+          // If we had 2 participants and now have 1, end the call
+          if (participantCount >= 2 && participants.length === 1) {
             console.log('Other participant left the call');
-            setShowCallEnded(true);
+            onCallEnd();
           }
 
-          prevParticipantCount = participants.length;
+          participantCount = participants.length;
         });
 
+        // Store unsubscribe functions for cleanup
+        
       } catch (error) {
         console.error("Video call error:", error);
         setError("Không thể kết nối video call");
@@ -135,23 +137,21 @@ export default function VideoCall({
 
     return () => {
       isMounted = false;
-
-      // Cleanup subscriptions using the local variables
-      if (callStateSubscription) {
-        callStateSubscription.unsubscribe();
+      if (call) {
+        // Cleanup subscriptions
+        if ((call as any)._callStateUnsubscribe) {
+          (call as any)._callStateUnsubscribe();
+        }
+        if ((call as any)._participantUnsubscribe) {
+          (call as any)._participantUnsubscribe();
+        }
+        call.leave();
       }
-      if (participantSubscription) {
-        participantSubscription.unsubscribe();
-      }
-
-      if (currentCall) {
-        currentCall.leave();
-      }
-      if (currentClient) {
-        currentClient.disconnectUser();
+      if (client) {
+        client.disconnectUser();
       }
     };
-  }, [callId, hasJoined, showCallEnded]); // Added showCallEnded to dependencies as it's used inside effect
+  }, [callId, hasJoined]);
 
   if (loading) {
     return (
@@ -187,6 +187,7 @@ export default function VideoCall({
 
   return (
     <div className="fixed inset-0 bg-black z-50 overflow-hidden">
+      {/* Custom CSS to keep only microphone, camera, and hang up buttons */}
       <style jsx>{`
         .str-video__call-controls button:not([data-testid*="microphone"]):not([data-testid*="camera"]):not([data-testid*="leave"]):not([data-testid*="hang-up"]):not([aria-label*="Microphone"]):not([aria-label*="Camera"]):not([aria-label*="Leave"]):not([aria-label*="Hang up"]):not([title*="Microphone"]):not([title*="Camera"]):not([title*="Leave"]):not([title*="Hang up"]) {
           display: none !important;
@@ -196,16 +197,45 @@ export default function VideoCall({
       <StreamVideo client={client}>
         <StreamCall call={call}>
           <StreamTheme>
-            {gridLayout}
+            <PaginatedGridLayout groupSize={2} />
 
-            <div className="absolute bottom-8 left-0 right-0 flex justify-center z-10">
-              <CallControls onLeave={onCallEnd} />
+            {/* PHẦN SỬA ĐỔI: Thay thế CallControls bằng bộ nút tùy chỉnh */}
+            <div className="absolute bottom-10 left-0 right-0 flex justify-center z-10">
+              <div className="bg-black/40 backdrop-blur-md p-4 rounded-full flex items-center gap-6 border border-white/10 shadow-2xl">
+                {/* Nút bật/tắt Micro */}
+                <div className="hover:scale-110 transition-transform">
+                  <ToggleAudioPublishingButton />
+                </div>
+
+                {/* Nút Kết thúc cuộc gọi - Được làm nổi bật hơn */}
+                <div className="scale-125 mx-2 hover:scale-135 transition-transform">
+                  <CancelCallButton
+                    onClick={async () => {
+                      // Send call end message before ending call
+                      if ((window as any).sendCallEndMessage) {
+                        try {
+                          await (window as any).sendCallEndMessage();
+                        } catch (error) {
+                          console.error("Error sending call end message:", error);
+                        }
+                      }
+                      onCallEnd();
+                    }}
+                  />
+                </div>
+
+                {/* Nút bật/tắt Camera */}
+                <div className="hover:scale-110 transition-transform">
+                  <ToggleVideoPublishingButton />
+                </div>
+              </div>
             </div>
           </StreamTheme>
         </StreamCall>
       </StreamVideo>
 
-      {showWaitingForParticipant && participantCount < 2 && !showCallEnded && (
+      {/* Waiting for other participant - only show for callers waiting after acceptance */}
+      {showWaitingForParticipant && participantCount < 2 && (
         <div className="absolute inset-0 bg-black bg-opacity-80 flex items-center justify-center z-[60]">
           <div className="bg-white dark:bg-gray-800 rounded-2xl p-8 max-w-sm mx-4 shadow-2xl text-center">
             <div className="w-16 h-16 bg-blue-100 dark:bg-blue-900 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -224,33 +254,17 @@ export default function VideoCall({
               <div className="w-2 h-2 bg-pink-500 rounded-full animate-bounce" style={{ animationDelay: "0.1s" }}></div>
               <div className="w-2 h-2 bg-pink-500 rounded-full animate-bounce" style={{ animationDelay: "0.2s" }}></div>
             </div>
-          </div>
-        </div>
-      )}
-
-      {showCallEnded && (
-        <div className="absolute inset-0 bg-black bg-opacity-80 flex items-center justify-center z-[60]">
-          <div className="bg-white dark:bg-gray-800 rounded-2xl p-8 max-w-sm mx-4 shadow-2xl text-center">
-            <div className="w-16 h-16 bg-red-100 dark:bg-red-900 rounded-full flex items-center justify-center mx-auto mb-4">
-              <svg className="w-8 h-8 text-red-600 dark:text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 8l-8 8m0-8l8 8M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z" />
-              </svg>
-            </div>
-            <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
-              Cuộc gọi đã kết thúc
-            </h3>
-            <p className="text-gray-600 dark:text-gray-400 mb-6">
-              Người kia đã rời khỏi cuộc gọi
-            </p>
             <button
               onClick={onCallEnd}
               className="bg-gray-700 text-white font-semibold py-2 px-6 rounded-full hover:bg-gray-600 transition-all"
             >
-              Trở lại
+              Đóng
             </button>
           </div>
         </div>
       )}
+
+
     </div>
   );
 }

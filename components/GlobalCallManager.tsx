@@ -21,6 +21,11 @@ export default function GlobalCallManager() {
   const [callerImage, setCallerImage] = useState<string>("");
   const [showIncomingCall, setShowIncomingCall] = useState(false);
 
+  // Outgoing call states
+  const [outgoingCallId, setOutgoingCallId] = useState<string>("");
+  const [calleeName, setCalleeName] = useState<string>("");
+  const [showOutgoingCall, setShowOutgoingCall] = useState(false);
+
   const [activeCallId, setActiveCallId] = useState<string>("");
   const [showActiveCall, setShowActiveCall] = useState(false);
 
@@ -42,6 +47,20 @@ export default function GlobalCallManager() {
           setCallerName(customData.caller_name || event.user?.name || "Ai đó");
           setCallerImage(customData.caller_image || event.user?.image || "");
           setShowIncomingCall(true);
+        }
+      }
+
+      // Handle call acceptance for outgoing calls
+      if (event.message?.text?.includes("📹 Call accepted - joining now")) {
+        const customData = event.message as unknown as VideoCallCustomData;
+        const currentUserId = chatClient?.userID;
+
+        if (customData.call_id && customData.acceptor_id && customData.acceptor_id !== currentUserId && customData.call_accepted) {
+          // This is for our outgoing call
+          if (customData.call_id === outgoingCallId) {
+            console.log("Outgoing call accepted by receiver:", customData.call_id);
+            handleOutgoingCallAccepted(customData.call_id);
+          }
         }
       }
     };
@@ -137,15 +156,89 @@ export default function GlobalCallManager() {
     setCallerImage("");
   };
 
+  // Function to initiate outgoing call (called from other components)
+  const initiateCall = (callId: string, calleeName: string) => {
+    setOutgoingCallId(callId);
+    setCalleeName(calleeName);
+    setShowOutgoingCall(true);
+  };
+
+  const handleCancelOutgoingCall = () => {
+    setShowOutgoingCall(false);
+    setOutgoingCallId("");
+    setCalleeName("");
+  };
+
+  const handleOutgoingCallAccepted = (callId: string) => {
+    setShowOutgoingCall(false);
+    setActiveCallId(callId);
+    setShowActiveCall(true);
+    setOutgoingCallId("");
+    setCalleeName("");
+  };
+
+  const handleCallerVideoCall = (callId: string) => {
+    setActiveCallId(callId);
+    setShowActiveCall(true);
+  };
+
   const handleCallEnd = () => {
     setShowActiveCall(false);
     setActiveCallId("");
   };
 
-  if (!showIncomingCall && !showActiveCall) return null;
+  // Expose functions to window for global access
+  useEffect(() => {
+    (window as any).globalCallManager = { initiateCall, handleCallerVideoCall };
+    return () => {
+      delete (window as any).globalCallManager;
+    };
+  }, []);
+
+  if (!showIncomingCall && !showOutgoingCall && !showActiveCall) return null;
 
   return (
     <>
+      {/* --- MODAL CUỘC GỌI ĐI (OUTGOING CALL) --- */}
+      {showOutgoingCall && (
+        <div className="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-[9999] backdrop-blur-sm">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl p-8 max-w-sm mx-4 shadow-2xl animate-pulse-fade border border-gray-200 dark:border-gray-700">
+            <div className="text-center">
+              <div className="w-20 h-20 rounded-full bg-blue-100 dark:bg-blue-900 flex items-center justify-center mx-auto mb-4 animate-pulse">
+                <svg className="w-10 h-10 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                </svg>
+              </div>
+              <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
+                Đang chờ người kia bắt máy
+              </h3>
+              <p className="text-gray-600 dark:text-gray-400 mb-6">
+                Đang gọi cho <span className="font-bold">{calleeName}</span>
+              </p>
+              <div className="flex justify-center mb-4">
+                <div className="w-3 h-3 bg-pink-500 rounded-full animate-bounce"></div>
+                <div className="w-3 h-3 bg-pink-500 rounded-full animate-bounce mx-2" style={{ animationDelay: "0.1s" }}></div>
+                <div className="w-3 h-3 bg-pink-500 rounded-full animate-bounce" style={{ animationDelay: "0.2s" }}></div>
+              </div>
+              <div className="flex space-x-3">
+                <button
+                  onClick={handleCancelOutgoingCall}
+                  className="flex-1 bg-red-500 text-white py-3 px-6 rounded-full font-semibold hover:bg-red-600 transition-colors duration-200"
+                >
+                  Hủy cuộc gọi
+                </button>
+                <button
+                  onClick={handleCancelOutgoingCall}
+                  className="bg-gray-700 text-white py-3 px-6 rounded-full font-semibold hover:bg-gray-600 transition-colors duration-200"
+                >
+                  Đóng
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* --- MODAL THÔNG BÁO CUỘC GỌI ĐẾN --- */}
       {showIncomingCall && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999] backdrop-blur-sm">
@@ -192,8 +285,8 @@ export default function GlobalCallManager() {
           <VideoCall
             callId={activeCallId}
             onCallEnd={handleCallEnd}
-            isIncoming={true}
-            otherUserId={callerName}
+            isIncoming={!showOutgoingCall} // If it was an outgoing call that got accepted, it's not incoming
+            otherUserId={callerName || calleeName}
           />
         </div>
       )}
