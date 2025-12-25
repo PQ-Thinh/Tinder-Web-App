@@ -2,7 +2,11 @@
 
 import { getPotentialMatches, likeUser } from "@/lib/actions/matches";
 // Thêm updateUserProfile và getCurrentUserProfile để lấy/lưu cài đặt
-import { UserProfile, updateUserPreferences, getCurrentUserProfile } from "@/lib/actions/profile";
+import {
+  UserProfile,
+  updateUserPreferences,
+  getCurrentUserProfile,
+} from "@/lib/actions/profile";
 import { useEffect, useState, useRef, useLayoutEffect } from "react";
 import MatchCard from "@/components/MatchCard";
 import MatchButtons from "@/components/MatchButtons";
@@ -29,7 +33,7 @@ import {
   MenuItem,
   Stack,
   Chip,
-  OutlinedInput
+  OutlinedInput,
 } from "@mui/material";
 import { SelectChangeEvent } from "@mui/material/Select"; // Type cho Select
 
@@ -62,7 +66,7 @@ export default function MatchesPage() {
   const [preferences, setPreferences] = useState<Preferences>({
     distance: 50,
     age_range: { min: 18, max: 50 },
-    gender_preference: []
+    gender_preference: [],
   });
 
   const router = useRouter();
@@ -109,7 +113,7 @@ export default function MatchesPage() {
         setPreferences({
           distance: prefs.distance || 50,
           age_range: prefs.age_range || { min: 18, max: 50 },
-          gender_preference: prefs.gender_preference || []
+          gender_preference: prefs.gender_preference || [],
         });
       }
     } catch (error) {
@@ -136,22 +140,23 @@ export default function MatchesPage() {
 
   // 3. Các hàm change handler cho UI Inputs
   const handleDistanceChange = (event: Event, newValue: number | number[]) => {
-    setPreferences(prev => ({ ...prev, distance: newValue as number }));
+    setPreferences((prev) => ({ ...prev, distance: newValue as number }));
   };
 
   const handleAgeChange = (event: Event, newValue: number | number[]) => {
     const [min, max] = newValue as number[];
-    setPreferences(prev => ({ ...prev, age_range: { min, max } }));
+    setPreferences((prev) => ({ ...prev, age_range: { min, max } }));
   };
 
   const handleGenderChange = (event: SelectChangeEvent<string[]>) => {
-    const { target: { value } } = event;
-    setPreferences(prev => ({
+    const {
+      target: { value },
+    } = event;
+    setPreferences((prev) => ({
       ...prev,
-      gender_preference: typeof value === 'string' ? value.split(',') : value,
+      gender_preference: typeof value === "string" ? value.split(",") : value,
     }));
   };
-
 
   // --- GSAP Draggable (GIỮ NGUYÊN) ---
   useLayoutEffect(() => {
@@ -291,8 +296,21 @@ export default function MatchesPage() {
 
   if (loading) {
     return (
-      <Box sx={{ height: "100vh", display: "flex", justifyContent: "center", alignItems: "center", background: "#f0f0f0" }}>
-        <Skeleton variant="rectangular" width={isMobile ? "90vw" : 400} height={isMobile ? "60vh" : 500} sx={{ borderRadius: 4 }} />
+      <Box
+        sx={{
+          height: "100vh",
+          display: "flex",
+          justifyContent: "center",
+          alignItems: "center",
+          background: "#f0f0f0",
+        }}
+      >
+        <Skeleton
+          variant="rectangular"
+          width={isMobile ? "90vw" : 400}
+          height={isMobile ? "60vh" : 500}
+          sx={{ borderRadius: 4 }}
+        />
       </Box>
     );
   }
@@ -316,7 +334,7 @@ export default function MatchesPage() {
             borderRadius: 4,
             boxShadow: "0 8px 32px rgba(0,0,0,0.1)",
             maxWidth: 400,
-            width: "90%"
+            width: "90%",
           }}
         >
           <Box sx={{ fontSize: 60, mb: 2 }}>🤔</Box>
@@ -336,7 +354,7 @@ export default function MatchesPage() {
                 borderRadius: 20,
                 background: "linear-gradient(45deg, #2196F3 30%, #21CBF3 90%)",
                 fontWeight: "bold",
-                py: 1.5
+                py: 1.5,
               }}
             >
               Cài đặt tìm kiếm
@@ -350,7 +368,7 @@ export default function MatchesPage() {
                 borderRadius: 20,
                 borderColor: "#FF8E53",
                 color: "#FF8E53",
-                fontWeight: "bold"
+                fontWeight: "bold",
               }}
             >
               Làm mới trang
@@ -359,27 +377,38 @@ export default function MatchesPage() {
         </Card>
 
         {/* --- DIALOG CÀI ĐẶT --- */}
-        <Dialog open={showSettings} onClose={() => setShowSettings(false)} fullWidth maxWidth="xs">
-          <DialogTitle sx={{ fontWeight: 'bold', textAlign: 'center' }}>Bộ lọc tìm kiếm</DialogTitle>
+        <Dialog
+          open={showSettings}
+          onClose={() => setShowSettings(false)}
+          fullWidth
+          maxWidth="xs"
+        >
+          <DialogTitle sx={{ fontWeight: "bold", textAlign: "center" }}>
+            Bộ lọc tìm kiếm
+          </DialogTitle>
           <DialogContent dividers>
             <Stack spacing={4} sx={{ mt: 1 }}>
-
               {/* 1. Khoảng cách */}
               <Box>
-                <Typography gutterBottom fontWeight={600}>Khoảng cách tối đa: {preferences.distance}km</Typography>
+                <Typography gutterBottom fontWeight={600}>
+                  Khoảng cách tối đa: {preferences.distance}km
+                </Typography>
                 <Slider
                   value={preferences.distance}
                   onChange={handleDistanceChange}
                   valueLabelDisplay="auto"
                   min={5}
                   max={200} // Ví dụ max 200km
-                  sx={{ color: '#E94086' }}
+                  sx={{ color: "#E94086" }}
                 />
               </Box>
 
               {/* 2. Độ tuổi */}
               <Box>
-                <Typography gutterBottom fontWeight={600}>Độ tuổi: {preferences.age_range.min} - {preferences.age_range.max}</Typography>
+                <Typography gutterBottom fontWeight={600}>
+                  Độ tuổi: {preferences.age_range.min} -{" "}
+                  {preferences.age_range.max}
+                </Typography>
                 <Slider
                   value={[preferences.age_range.min, preferences.age_range.max]}
                   onChange={handleAgeChange}
@@ -387,7 +416,7 @@ export default function MatchesPage() {
                   min={18}
                   max={60}
                   disableSwap
-                  sx={{ color: '#E94086' }}
+                  sx={{ color: "#E94086" }}
                 />
               </Box>
 
@@ -400,9 +429,18 @@ export default function MatchesPage() {
                   onChange={handleGenderChange}
                   input={<OutlinedInput label="Hiển thị" />}
                   renderValue={(selected) => (
-                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                    <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}>
                       {selected.map((value) => (
-                        <Chip key={value} label={value === 'male' ? 'Nam' : value === 'female' ? 'Nữ' : 'Khác'} />
+                        <Chip
+                          key={value}
+                          label={
+                            value === "male"
+                              ? "Nam"
+                              : value === "female"
+                              ? "Nữ"
+                              : "Khác"
+                          }
+                        />
                       ))}
                     </Box>
                   )}
@@ -412,20 +450,21 @@ export default function MatchesPage() {
                   <MenuItem value="other">Khác</MenuItem>
                 </Select>
               </FormControl>
-
             </Stack>
           </DialogContent>
-          <DialogActions sx={{ p: 2, justifyContent: 'center' }}>
-            <Button onClick={() => setShowSettings(false)} color="inherit">Hủy</Button>
+          <DialogActions sx={{ p: 2, justifyContent: "center" }}>
+            <Button onClick={() => setShowSettings(false)} color="inherit">
+              Hủy
+            </Button>
             <Button
               onClick={handleSaveSettings}
               variant="contained"
               disabled={savingSettings}
               sx={{
-                bgcolor: '#E94086',
-                '&:hover': { bgcolor: '#D63376' },
+                bgcolor: "#E94086",
+                "&:hover": { bgcolor: "#D63376" },
                 px: 4,
-                borderRadius: 10
+                borderRadius: 10,
               }}
             >
               {savingSettings ? "Đang lưu..." : "Áp dụng"}
@@ -516,11 +555,43 @@ export default function MatchesPage() {
               }}
             >
               <MatchCard user={currentPotentialMatch} />
-              <Box ref={likeOverlayRef} sx={{ position: "absolute", top: 40, left: 40, border: "4px solid #4CAF50", borderRadius: 2, padding: "4px 12px", transform: "rotate(-15deg)", opacity: 0, pointerEvents: "none", zIndex: 40 }}>
-                <Typography variant="h4" fontWeight={900} color="#4CAF50">LIKE</Typography>
+              <Box
+                ref={likeOverlayRef}
+                sx={{
+                  position: "absolute",
+                  top: 40,
+                  left: 40,
+                  border: "4px solid #4CAF50",
+                  borderRadius: 2,
+                  padding: "4px 12px",
+                  transform: "rotate(-15deg)",
+                  opacity: 0,
+                  pointerEvents: "none",
+                  zIndex: 40,
+                }}
+              >
+                <Typography variant="h4" fontWeight={900} color="#4CAF50">
+                  LIKE
+                </Typography>
               </Box>
-              <Box ref={nopeOverlayRef} sx={{ position: "absolute", top: 40, right: 40, border: "4px solid #F44336", borderRadius: 2, padding: "4px 12px", transform: "rotate(15deg)", opacity: 0, pointerEvents: "none", zIndex: 40 }}>
-                <Typography variant="h4" fontWeight={900} color="#F44336">NOPE</Typography>
+              <Box
+                ref={nopeOverlayRef}
+                sx={{
+                  position: "absolute",
+                  top: 40,
+                  right: 40,
+                  border: "4px solid #F44336",
+                  borderRadius: 2,
+                  padding: "4px 12px",
+                  transform: "rotate(15deg)",
+                  opacity: 0,
+                  pointerEvents: "none",
+                  zIndex: 40,
+                }}
+              >
+                <Typography variant="h4" fontWeight={900} color="#F44336">
+                  NOPE
+                </Typography>
               </Box>
             </Box>
           </Box>
@@ -547,24 +618,29 @@ export default function MatchesPage() {
 
       <Box
         sx={{
-          width: { xs: "100%", lg: 450, xl: 500 },
-          height: {
-            lg: `calc(100vh  ${NAVBAR_HEIGHT}px)`,
-          },
+          width: { xs: "100%", lg: 550, xl: 600 },
+          height: { lg: `calc(100vh - ${NAVBAR_HEIGHT}px)` },
           flexShrink: 0,
           order: { xs: 2, lg: 1 },
           bgcolor: { lg: "rgba(255, 255, 255, 0.65)" },
           backdropFilter: { lg: "blur(20px)" },
-          boxShadow: { lg: "10px 0 30px rgba(0,0,0,0.05)" },
-          borderRight: { lg: "1px solid rgba(255, 255, 255, 0.3)" },
-          overflowY: { lg: "auto" },
-          "&::-webkit-scrollbar": { display: "none" },
-          msOverflowStyle: "none",
-          scrollbarWidth: "none",
+          display: "flex",
+          flexDirection: "column",
+          overflow: "hidden", // Giữ nguyên hidden ở đây
         }}
       >
         <Box
-          sx={{ p: { xs: 2, lg: 3 }, pb: { xs: 14, lg: 6 } }}>
+          sx={{
+            p: { xs: 2, lg: 4 },
+            flexGrow: 1,
+            display: "flex",
+            flexDirection: "column",
+            // --- SỬA ĐOẠN NÀY ---
+            overflow: "hidden", // Đổi từ "scroll" thành "hidden"
+            height: "100%", // Đảm bảo chiếm hết chiều cao để Leaderboard bên trong làm việc
+            // --------------------
+          }}
+        >
           <Leaderboard />
         </Box>
       </Box>
