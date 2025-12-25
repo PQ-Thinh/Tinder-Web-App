@@ -138,12 +138,33 @@ export default function StreamChatInterface({
         chatChannel.on("message.new", (event: Event) => {
           console.log("Received message:", event.message);
           if (event.message) {
-            // Video call handling is now done by GlobalCallManager
-            // Only handle regular messages here
+            const messageText = event.message.text || "";
+            const customData = event.message as unknown as VideoCallCustomData;
+            
+            // Handle "Call accepted" message - notify caller to enter room
+            if (messageText.includes("📹 Call accepted") && event.message.user?.id !== userId) {
+              console.log("Call accepted message received, notifying GlobalCallManager");
+              if ((window as any).globalCallManager?.handleOutgoingCallAccepted) {
+                console.log("Calling handleOutgoingCallAccepted (using current outgoingCallId)");
+                (window as any).globalCallManager.handleOutgoingCallAccepted();
+              } else {
+                console.log("handleOutgoingCallAccepted function not available");
+              }
+            }
+
+            // Handle "Call declined" message - notify caller
+            if (messageText.includes("📹 Call declined") && event.message.user?.id !== userId) {
+              console.log("Call declined message received");
+              if ((window as any).globalCallManager?.handleOutgoingCallDeclined) {
+                (window as any).globalCallManager.handleOutgoingCallDeclined();
+              }
+            }
+            
+            // Handle regular messages (not from self)
             if (event.message.user?.id !== userId) {
               const newMsg: Message = {
                 id: event.message.id,
-                text: event.message.text || "",
+                text: messageText,
                 sender: "other",
                 timestamp: new Date(event.message.created_at || new Date()),
                 user_id: event.message.user?.id || "",
@@ -176,7 +197,7 @@ export default function StreamChatInterface({
         setClient(chatClient);
         setChannel(chatChannel);
 
-        // Expose sendCallEndMessage globally
+        // Expose sendCallEndMessage and channel globally for GlobalCallManager
         (window as any).sendCallEndMessage = async () => {
           if (chatChannel) {
             try {
@@ -188,6 +209,9 @@ export default function StreamChatInterface({
             }
           }
         };
+
+        // Store current channel globally so GlobalCallManager can use it
+        (window as any).currentChatChannel = chatChannel;
       } catch (error) {
         console.error(error);
       } finally {
@@ -218,15 +242,10 @@ export default function StreamChatInterface({
       }
 
       // Use GlobalCallManager to handle the outgoing call
+      // Caller CHỈ hiện modal chờ, KHÔNG vào phòng call
+      // Sẽ vào phòng khi receiver accept
       if ((window as any).globalCallManager) {
         (window as any).globalCallManager.initiateCall(callId, otherUser.full_name || "Người kia");
-
-        // Also start video call for caller immediately with isCaller=true
-        setTimeout(() => {
-          if ((window as any).globalCallManager?.handleCallerVideoCall) {
-            (window as any).globalCallManager.handleCallerVideoCall(callId);
-          }
-        }, 500); // Small delay to ensure call is initiated
       }
 
       // Send call invitation message

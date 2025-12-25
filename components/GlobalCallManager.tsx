@@ -12,6 +12,12 @@ interface VideoCallCustomData extends Record<string, unknown> {
   caller_name?: string;
   caller_image?: string;
   text?: string;
+  acceptor_id?: string;
+  decliner_id?: string;
+  canceller_id?: string;
+  call_accepted?: boolean;
+  call_declined?: boolean;
+  call_cancelled?: boolean;
 }
 
 export default function GlobalCallManager() {
@@ -28,19 +34,20 @@ export default function GlobalCallManager() {
 
   const [activeCallId, setActiveCallId] = useState<string>("");
   const [showActiveCall, setShowActiveCall] = useState(false);
+  const [showCallEnded, setShowCallEnded] = useState(false);
 
   const [client, setClient] = useState<StreamChat | null>(null);
 
   useEffect(() => {
     let chatClient: StreamChat | null = null;
 
-    // 1. Khai báo handler ở scope của useEffect để cleanup function có thể gọi được
-    const handleNewEvent = (event: Event) => {
-      if (event.message?.text?.includes("📹 Video call invitation")) {
-        const customData = event.message as unknown as VideoCallCustomData;
-        // Lưu ý: Lúc này chatClient đã được gán giá trị ở init
-        const currentUserId = chatClient?.userID;
+    // Handle incoming call invitations and cancellations
+    const handleGlobalMessage = (event: Event) => {
+      const customData = event.message as unknown as VideoCallCustomData;
+      const currentUserId = chatClient?.userID;
 
+      // Handle incoming call invitation (for receiver)
+      if (event.message?.text?.includes("📹 Video call invitation")) {
         if (customData.caller_id && customData.caller_id !== currentUserId) {
           setIncomingCallId(customData.call_id || "");
           setCallerId(customData.caller_id);
@@ -50,17 +57,19 @@ export default function GlobalCallManager() {
         }
       }
 
-      // Handle call acceptance for outgoing calls
-      if (event.message?.text?.includes("📹 Call accepted - joining now")) {
-        const customData = event.message as unknown as VideoCallCustomData;
-        const currentUserId = chatClient?.userID;
+      // Handle call cancelled (for receiver) - caller cancelled the call
+      if (event.message?.text?.includes("📹 Call cancelled")) {
+        const cancelledCallId = customData.call_id;
+        const cancellerId = customData.canceller_id;
 
-        if (customData.call_id && customData.acceptor_id && customData.acceptor_id !== currentUserId && customData.call_accepted) {
-          // This is for our outgoing call
-          if (customData.call_id === outgoingCallId) {
-            console.log("Outgoing call accepted by receiver:", customData.call_id);
-            handleOutgoingCallAccepted(customData.call_id);
-          }
+        // If someone cancelled a call and we have an incoming call with that ID
+        if (cancelledCallId && cancelledCallId === incomingCallId) {
+          console.log("Call cancelled by caller, dismissing incoming call modal");
+          setShowIncomingCall(false);
+          setIncomingCallId("");
+          setCallerId("");
+          setCallerName("");
+          setCallerImage("");
         }
       }
     };
@@ -84,9 +93,9 @@ export default function GlobalCallManager() {
           );
         }
 
-        // 2. Đăng ký sự kiện
-        chatClient.on("notification.message_new", handleNewEvent);
-        chatClient.on("message.new", handleNewEvent);
+        // 2. Đăng ký sự kiện global cho invitations
+        chatClient.on("notification.message_new", handleGlobalMessage);
+        chatClient.on("message.new", handleGlobalMessage);
 
         setClient(chatClient);
       } catch (error) {
@@ -99,30 +108,21 @@ export default function GlobalCallManager() {
     // 3. Cleanup: Hủy đúng hàm handler đã đăng ký
     return () => {
       if (chatClient) {
-        chatClient.off("notification.message_new", handleNewEvent);
-        chatClient.off("message.new", handleNewEvent);
+        chatClient.off("notification.message_new", handleGlobalMessage);
+        chatClient.off("message.new", handleGlobalMessage);
       }
     };
   }, []);
 
+  // Accept/decline messages are handled by the global listener above
+
   const handleAcceptCall = async () => {
-    if (client && incomingCallId) {
+    // Use the shared channel from StreamChatInterface
+    const channel = (window as any).currentChatChannel;
+
+    if (channel && incomingCallId) {
       try {
-        const currentUserId = client.userID!;
-        const otherUserId = callerId;
-
-        const sortedIds = [currentUserId, otherUserId].sort();
-        const combinedIds = sortedIds.join("_");
-
-        let hash = 0;
-        for (let i = 0; i < combinedIds.length; i++) {
-          const char = combinedIds.charCodeAt(i);
-          hash = (hash << 5) - hash + char;
-          hash = hash & hash;
-        }
-
-        const channelId = `match_${Math.abs(hash).toString(36)}`;
-        const channel = client.channel("messaging", channelId);
+        const currentUserId = client?.userID!;
 
         const acceptanceData = {
           text: `📹 Call accepted - joining now`,
@@ -148,7 +148,28 @@ export default function GlobalCallManager() {
     setCallerImage("");
   };
 
-  const handleDeclineCall = () => {
+  const handleDeclineCall = async () => {
+    // Use the shared channel from StreamChatInterface
+    const channel = (window as any).currentChatChannel;
+
+    if (channel && incomingCallId) {
+      try {
+        const currentUserId = client?.userID!;
+
+        const declineData = {
+          text: `📹 Call declined`,
+          call_id: incomingCallId,
+          decliner_id: currentUserId,
+          call_declined: true,
+        };
+
+        await channel.sendMessage(declineData);
+        console.log("Sent call decline message from GlobalCallManager");
+      } catch (error) {
+        console.error("Error sending decline message:", error);
+      }
+    }
+
     setShowIncomingCall(false);
     setIncomingCallId("");
     setCallerId("");
@@ -163,18 +184,46 @@ export default function GlobalCallManager() {
     setShowOutgoingCall(true);
   };
 
-  const handleCancelOutgoingCall = () => {
+  const handleCancelOutgoingCall = async () => {
+    // Send call cancelled message to sync with receiver
+    const channel = (window as any).currentChatChannel;
+    if (channel && outgoingCallId) {
+      try {
+        const currentUserId = client?.userID!;
+        const cancelData = {
+          text: `📹 Call cancelled`,
+          call_id: outgoingCallId,
+          canceller_id: currentUserId,
+          call_cancelled: true,
+        };
+        await channel.sendMessage(cancelData);
+        console.log("Sent call cancelled message");
+      } catch (error) {
+        console.error("Error sending cancel message:", error);
+      }
+    }
+
     setShowOutgoingCall(false);
     setOutgoingCallId("");
     setCalleeName("");
   };
 
-  const handleOutgoingCallAccepted = (callId: string) => {
+  const handleOutgoingCallAccepted = (callId?: string) => {
+    const idToUse = callId || outgoingCallId;
+    if (idToUse) {
+      setShowOutgoingCall(false);
+      setActiveCallId(idToUse);
+      setShowActiveCall(true);
+      setOutgoingCallId("");
+      setCalleeName("");
+    }
+  };
+
+  const handleOutgoingCallDeclined = () => {
     setShowOutgoingCall(false);
-    setActiveCallId(callId);
-    setShowActiveCall(true);
     setOutgoingCallId("");
     setCalleeName("");
+    // Could show a brief notification here if needed
   };
 
   const handleCallerVideoCall = (callId: string) => {
@@ -183,19 +232,38 @@ export default function GlobalCallManager() {
   };
 
   const handleCallEnd = () => {
+    // Reset all call states first
     setShowActiveCall(false);
     setActiveCallId("");
+    setShowOutgoingCall(false);
+    setOutgoingCallId("");
+    setCalleeName("");
+    setShowIncomingCall(false);
+    setIncomingCallId("");
+    setCallerId("");
+    setCallerName("");
+    setCallerImage("");
+
+    // Show call ended modal
+    setShowCallEnded(true);
+    // Auto-close after 3 seconds
+    setTimeout(() => setShowCallEnded(false), 3000);
   };
 
   // Expose functions to window for global access
   useEffect(() => {
-    (window as any).globalCallManager = { initiateCall, handleCallerVideoCall };
+    (window as any).globalCallManager = { 
+      initiateCall, 
+      handleCallerVideoCall,
+      handleOutgoingCallAccepted,
+      handleOutgoingCallDeclined,
+    };
     return () => {
       delete (window as any).globalCallManager;
     };
   }, []);
 
-  if (!showIncomingCall && !showOutgoingCall && !showActiveCall) return null;
+  if (!showIncomingCall && !showOutgoingCall && !showActiveCall && !showCallEnded) return null;
 
   return (
     <>
@@ -288,6 +356,33 @@ export default function GlobalCallManager() {
             isIncoming={!showOutgoingCall} // If it was an outgoing call that got accepted, it's not incoming
             otherUserId={callerName || calleeName}
           />
+        </div>
+      )}
+
+      {/* --- MODAL CUỘC GỌI ĐÃ KẾT THÚC --- */}
+      {showCallEnded && (
+        <div className="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-[9999] backdrop-blur-sm">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl p-8 max-w-sm mx-4 shadow-2xl animate-pulse-fade border border-gray-200 dark:border-gray-700">
+            <div className="text-center">
+              <div className="w-20 h-20 rounded-full bg-green-100 dark:bg-green-900 flex items-center justify-center mx-auto mb-4 animate-pulse">
+                <svg className="w-10 h-10 text-green-600 dark:text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+              </div>
+              <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
+                Cuộc gọi đã kết thúc
+              </h3>
+              <p className="text-gray-600 dark:text-gray-400 mb-6">
+                Cảm ơn bạn đã sử dụng tính năng video call.
+              </p>
+              <button
+                onClick={() => setShowCallEnded(false)}
+                className="bg-pink-500 text-white py-3 px-6 rounded-full font-semibold hover:bg-pink-600 transition-colors duration-200"
+              >
+                Thoát
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </>

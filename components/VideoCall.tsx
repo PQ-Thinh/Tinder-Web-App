@@ -234,8 +234,8 @@ export default function VideoCall({
         </StreamCall>
       </StreamVideo>
 
-      {/* Waiting for other participant - only show for callers waiting after acceptance */}
-      {showWaitingForParticipant && participantCount < 2 && (
+      {/* Waiting for other participant - show for outgoing calls with only 1 participant */}
+      {!isIncoming && participantCount < 2 && (
         <div className="absolute inset-0 bg-black bg-opacity-80 flex items-center justify-center z-[60]">
           <div className="bg-white dark:bg-gray-800 rounded-2xl p-8 max-w-sm mx-4 shadow-2xl text-center">
             <div className="w-16 h-16 bg-blue-100 dark:bg-blue-900 rounded-full flex items-center justify-center mx-auto mb-4">
