@@ -15,7 +15,6 @@ import {
   useState,
 } from "react";
 import { Channel, Event, StreamChat, MessageResponse } from "stream-chat"; // Import MessageResponse
-import VideoCall from "./VideoCall";
 
 // --- 1. ĐỊNH NGHĨA CÁC INTERFACE ---
 
@@ -58,16 +57,7 @@ export default function StreamChatInterface({
 
   const [showScrollButton, setShowScrollButton] = useState<boolean>(false);
 
-  const [videoCallId, setVideoCallId] = useState<string>("");
-  const [showVideoCall, setShowVideoCall] = useState(false);
-  const [isCallInitiator, setIsCallInitiator] = useState(false);
-
-
-
-  // Waiting room states
-  const [showWaitingRoom, setShowWaitingRoom] = useState(false);
-  const [waitingRoomCallId, setWaitingRoomCallId] = useState<string>("");
-  const [waitingForParticipant, setWaitingForParticipant] = useState<string>("");
+  // Video call states - now managed by GlobalCallManager
 
 
 
@@ -103,46 +93,7 @@ export default function StreamChatInterface({
     }
   }, [handleScroll]);
 
-  // Separate effect to handle call acceptance messages for callers
   useEffect(() => {
-    if (!channel || !isCallInitiator || !waitingRoomCallId) return;
-
-    const handleAcceptanceMessage = (event: Event) => {
-      if (event.message?.text?.includes(`📹 Call accepted - joining now`)) {
-        console.log("Call acceptance received by caller:", event.message);
-
-        const customData = event.message as unknown as VideoCallCustomData;
-
-        // If this acceptance is for our call, join immediately
-        if (customData.call_id === waitingRoomCallId && customData.call_accepted) {
-          console.log("Caller joining call after acceptance:", customData.call_id);
-
-          // Start the video call for caller - will show waiting UI until receiver joins
-          setVideoCallId(waitingRoomCallId);
-          setShowVideoCall(true);
-
-          // Hide waiting room
-          setShowWaitingRoom(false);
-          setWaitingRoomCallId("");
-          setWaitingForParticipant("");
-
-          // Notify parent component
-          onCallStart?.(waitingRoomCallId);
-        }
-      }
-    };
-
-    channel.on("message.new", handleAcceptanceMessage);
-
-    return () => {
-      channel.off("message.new", handleAcceptanceMessage);
-    };
-  }, [channel, isCallInitiator, waitingRoomCallId, onCallStart]);
-
-  useEffect(() => {
-    setShowVideoCall(false);
-    setVideoCallId("");
-    setIsCallInitiator(false);
 
     async function initializeChat() {
       try {
@@ -187,12 +138,33 @@ export default function StreamChatInterface({
         chatChannel.on("message.new", (event: Event) => {
           console.log("Received message:", event.message);
           if (event.message) {
-            // Video call handling is now done by GlobalCallManager
-            // Only handle regular messages here
+            const messageText = event.message.text || "";
+            const customData = event.message as unknown as VideoCallCustomData;
+            
+            // Handle "Call accepted" message - notify caller to enter room
+            if (messageText.includes("📹 Call accepted") && event.message.user?.id !== userId) {
+              console.log("Call accepted message received, notifying GlobalCallManager");
+              if (window.globalCallManager?.handleOutgoingCallAccepted) {
+                console.log("Calling handleOutgoingCallAccepted with callId:", customData.call_id);
+                window.globalCallManager.handleOutgoingCallAccepted(customData.call_id);
+              } else {
+                console.log("handleOutgoingCallAccepted function not available");
+              }
+            }
+
+            // Handle "Call declined" message - notify caller
+            if (messageText.includes("📹 Call declined") && event.message.user?.id !== userId) {
+              console.log("Call declined message received");
+              if (window.globalCallManager?.handleOutgoingCallDeclined) {
+                window.globalCallManager.handleOutgoingCallDeclined();
+              }
+            }
+            
+            // Handle regular messages (not from self)
             if (event.message.user?.id !== userId) {
               const newMsg: Message = {
                 id: event.message.id,
-                text: event.message.text || "",
+                text: messageText,
                 sender: "other",
                 timestamp: new Date(event.message.created_at || new Date()),
                 user_id: event.message.user?.id || "",
@@ -224,6 +196,22 @@ export default function StreamChatInterface({
 
         setClient(chatClient);
         setChannel(chatChannel);
+
+        // Expose sendCallEndMessage and channel globally for GlobalCallManager
+        window.sendCallEndMessage = async () => {
+          if (chatChannel) {
+            try {
+              await chatChannel.sendMessage({
+                text: "📹 Call ended",
+              });
+            } catch (error) {
+              console.error("Error sending call end message:", error);
+            }
+          }
+        };
+
+        // Store current channel globally so GlobalCallManager can use it
+        window.currentChatChannel = chatChannel;
       } catch (error) {
         console.error(error);
       } finally {
@@ -253,23 +241,20 @@ export default function StreamChatInterface({
         return;
       }
 
-      // Show waiting room for caller and start video call immediately
-      setWaitingRoomCallId(callId);
-      setWaitingForParticipant(otherUser.full_name || "Người kia");
-      setShowWaitingRoom(true);
-      setIsCallInitiator(true);
+      // Use GlobalCallManager to handle the outgoing call
+      // Caller CHỈ hiện modal chờ, KHÔNG vào phòng call
+      // Sẽ vào phòng khi receiver accept
+      if (window.globalCallManager) {
+        window.globalCallManager.initiateCall(callId, otherUser.full_name || "Người kia");
+      }
 
-      // Start video call immediately for caller (they will see waiting UI)
-      setVideoCallId(callId);
-      setShowVideoCall(true);
-
+      // Send call invitation message
       if (channel) {
         const messageData: VideoCallCustomData = {
           text: `📹 Video call invitation`,
           call_id: callId,
           caller_id: currentUserId,
           caller_name: otherUser.full_name || "Someone",
-          waiting_room: true, // Indicate this is a waiting room invitation
         };
 
         console.log("Sending call invitation message:", messageData);
@@ -319,11 +304,7 @@ export default function StreamChatInterface({
     }
   }
 
-  function handleCallEnd() {
-    setShowVideoCall(false);
-    setVideoCallId("");
-    setIsCallInitiator(false);
-  }
+
 
   function formatTime(date: Date) {
     return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
@@ -462,52 +443,6 @@ export default function StreamChatInterface({
           </button>
         </form>
       </div>
-
-
-
-      {/* Waiting Room */}
-      {showWaitingRoom && waitingRoomCallId && (
-        <div className="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-50">
-          <div className="bg-white dark:bg-gray-800 rounded-2xl p-8 max-w-sm mx-4 shadow-2xl text-center">
-            <div className="w-16 h-16 bg-blue-100 dark:bg-blue-900 rounded-full flex items-center justify-center mx-auto mb-4">
-              <svg className="w-8 h-8 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
-              </svg>
-            </div>
-            <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
-              Đang kết nối...
-            </h3>
-            <p className="text-gray-600 dark:text-gray-400 mb-6">
-              Đang chờ {waitingForParticipant} tham gia
-            </p>
-            <div className="flex space-x-2 justify-center mb-4">
-              <div className="w-2 h-2 bg-pink-500 rounded-full animate-bounce"></div>
-              <div className="w-2 h-2 bg-pink-500 rounded-full animate-bounce" style={{ animationDelay: "0.1s" }}></div>
-              <div className="w-2 h-2 bg-pink-500 rounded-full animate-bounce" style={{ animationDelay: "0.2s" }}></div>
-            </div>
-            <button
-              onClick={() => {
-                setShowWaitingRoom(false);
-                setWaitingRoomCallId("");
-                setWaitingForParticipant("");
-              }}
-              className="bg-gray-500 text-white py-2 px-6 rounded-full font-semibold hover:bg-gray-600 transition-colors duration-200"
-            >
-              Hủy
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Video Call - only for callers waiting or in active calls */}
-      {showVideoCall && videoCallId && (
-        <VideoCall
-          onCallEnd={handleCallEnd}
-          callId={videoCallId}
-          isIncoming={!isCallInitiator}
-          showWaitingForParticipant={isCallInitiator} // Show waiting UI only for callers
-        />
-      )}
     </div>
   );
 }
