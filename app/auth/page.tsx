@@ -369,8 +369,7 @@ function AuthPage() {
                 router.push("/");
             }
         } catch (err: unknown) {
-            // FIX: Kiểm tra lần cuối xem session có tồn tại không trước khi báo lỗi
-            // Nếu session tồn tại, nghĩa là lỗi chỉ là do server action sync chậm -> bỏ qua và redirect
+
             const { data: { session } } = await supabase.auth.getSession();
             if (session) {
                 router.push("/");

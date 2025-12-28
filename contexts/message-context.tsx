@@ -101,6 +101,7 @@ export function MessageProvider({ children }: { children: ReactNode }) {
       if (!client) return;
 
       const channel = client.channel('messaging', channelId);
+      await channel.watch(); // Ensure channel is watched before marking as read
       await channel.markRead();
 
       if (isMountedRef.current) {

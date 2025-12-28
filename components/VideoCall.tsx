@@ -1,19 +1,27 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState } from "react";
 import {
   Call,
-  CallControls,
+  ToggleAudioPublishingButton,
+  ToggleVideoPublishingButton,
+  CancelCallButton,
   PaginatedGridLayout,
   StreamCall,
   StreamTheme,
   StreamVideo,
   StreamVideoClient,
 } from "@stream-io/video-react-sdk";
-import { Subscription } from 'rxjs'; // Import Subscription type if available, or use a generic type
+import { Subscription } from "rxjs"; // Import Subscription từ rxjs (Stream dùng thư viện này)
 
 import "@stream-io/video-react-sdk/dist/css/styles.css";
 import { getStreamVideoToken } from "@/lib/actions/stream";
+
+// 1. Định nghĩa type mở rộng để chứa các hàm cleanup
+type CallWithCleanup = Call & {
+  _callStateUnsubscribe?: Subscription;
+  _participantUnsubscribe?: Subscription;
+};
 
 interface VideoCallProps {
   callId: string;
@@ -21,6 +29,7 @@ interface VideoCallProps {
   isIncoming?: boolean;
   otherUserId?: string;
   showWaitingForParticipant?: boolean;
+  isAcceptedCall?: boolean;
 }
 
 export default function VideoCall({
@@ -28,32 +37,23 @@ export default function VideoCall({
   onCallEnd,
   isIncoming = false,
   showWaitingForParticipant = false,
+  isAcceptedCall = false,
 }: VideoCallProps) {
   const [client, setClient] = useState<StreamVideoClient | null>(null);
-  const [call, setCall] = useState<Call | null>(null);
+  const [call, setCall] = useState<CallWithCleanup | null>(null); // Sử dụng type mới ở đây
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [hasJoined, setHasJoined] = useState(false);
-  const [showCallEnded, setShowCallEnded] = useState(false);
   const [participantCount, setParticipantCount] = useState(0);
-
-  // Memoize PaginatedGridLayout to prevent infinite re-renders
-  const gridLayout = useMemo(() => <PaginatedGridLayout />, []);
 
   useEffect(() => {
     let isMounted = true;
-    // Subscriptions for cleanup
-    let callStateSubscription: Subscription | undefined;
-    let participantSubscription: Subscription | undefined;
-    let currentCall: Call | undefined;
-    let currentClient: StreamVideoClient | undefined;
 
     async function initializeVideoCall() {
       if (hasJoined) return;
 
       try {
         setError(null);
-
         const { token, userId, userName, userImage } = await getStreamVideoToken();
 
         if (!isMounted) return;
@@ -67,12 +67,11 @@ export default function VideoCall({
           },
           token,
         });
-        currentClient = videoClient;
 
         if (!isMounted) return;
 
-        const videoCall = videoClient.call("default", callId);
-        currentCall = videoCall;
+        // Ép kiểu ngay khi khởi tạo call
+        const videoCall = videoClient.call("default", callId) as CallWithCleanup;
 
         await videoCall.join({ create: true });
 
@@ -85,41 +84,35 @@ export default function VideoCall({
 
         if (!isMounted) return;
 
-        setClient(videoClient);
-        setCall(videoCall);
-        setHasJoined(true);
-
-        // Listen for call state changes
-        callStateSubscription = videoCall.state.callingState$.subscribe((callingState) => {
+        // Lưu subscription vào biến
+        const callStateUnsubscribe = videoCall.state.callingState$.subscribe((callingState) => {
           console.log('Call state changed:', callingState);
-
-          if (callingState === 'left' && !showCallEnded) {
-            console.log('Call ended, checking participants...');
+          if (callingState === 'left') {
             setTimeout(() => {
               const participants = videoCall.state.participants;
-              console.log('Participants after call end:', participants.length);
               if (participants.length <= 1) {
-                console.log('Call ended by other participant or server');
-                setShowCallEnded(true);
+                onCallEnd();
               }
             }, 500);
           }
         });
 
-        // Listen for participant count changes
-        let prevParticipantCount = 0;
-        participantSubscription = videoCall.state.participants$.subscribe((participants) => {
-          console.log('Participants updated:', participants.length, 'previous:', prevParticipantCount);
-
+        let currentParticipantCount = 0;
+        const participantUnsubscribe = videoCall.state.participants$.subscribe((participants) => {
           setParticipantCount(participants.length);
-
-          if (prevParticipantCount >= 2 && participants.length === 1 && !showCallEnded) {
-            console.log('Other participant left the call');
-            setShowCallEnded(true);
+          if (currentParticipantCount >= 2 && participants.length === 1) {
+            onCallEnd();
           }
-
-          prevParticipantCount = participants.length;
+          currentParticipantCount = participants.length;
         });
+
+        // 2. Gán vào object videoCall một cách an toàn (không cần as any)
+        videoCall._callStateUnsubscribe = callStateUnsubscribe;
+        videoCall._participantUnsubscribe = participantUnsubscribe;
+
+        setClient(videoClient);
+        setCall(videoCall);
+        setHasJoined(true);
 
       } catch (error) {
         console.error("Video call error:", error);
@@ -135,24 +128,23 @@ export default function VideoCall({
 
     return () => {
       isMounted = false;
-
-      // Cleanup subscriptions using the local variables
-      if (callStateSubscription) {
-        callStateSubscription.unsubscribe();
+      if (call) {
+        // 3. Cleanup an toàn với type mới
+        if (call._callStateUnsubscribe) {
+          call._callStateUnsubscribe.unsubscribe();
+        }
+        if (call._participantUnsubscribe) {
+          call._participantUnsubscribe.unsubscribe();
+        }
+        call.leave();
       }
-      if (participantSubscription) {
-        participantSubscription.unsubscribe();
-      }
-
-      if (currentCall) {
-        currentCall.leave();
-      }
-      if (currentClient) {
-        currentClient.disconnectUser();
+      if (client) {
+        client.disconnectUser();
       }
     };
-  }, [callId, hasJoined, showCallEnded]); // Added showCallEnded to dependencies as it's used inside effect
+  }, [callId, hasJoined, call, client]); // Thêm call và client vào deps để đảm bảo cleanup đúng
 
+  // ... (Phần render giữ nguyên) ...
   if (loading) {
     return (
       <div className="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-50">
@@ -170,10 +162,7 @@ export default function VideoCall({
         <div className="text-center text-white max-w-md mx-auto p-8 bg-gray-900 rounded-2xl border border-gray-800">
           <h3 className="text-xl font-semibold mb-2 text-red-500">Lỗi cuộc gọi</h3>
           <p className="text-gray-400 mb-6">{error}</p>
-          <button
-            onClick={onCallEnd}
-            className="bg-gray-700 text-white font-semibold py-2 px-6 rounded-full hover:bg-gray-600 transition-all"
-          >
+          <button onClick={onCallEnd} className="bg-gray-700 text-white font-semibold py-2 px-6 rounded-full hover:bg-gray-600 transition-all">
             Đóng
           </button>
         </div>
@@ -181,8 +170,17 @@ export default function VideoCall({
     );
   }
 
-  if (!client || !call) {
-    return null;
+  if (!client || !call) return null;
+
+  if (participantCount < 2) {
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-50">
+        <div className="text-center text-white">
+          <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-pink-500 mx-auto mb-4"></div>
+          <p className="text-lg">Đang chờ người tham gia...</p>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -196,61 +194,34 @@ export default function VideoCall({
       <StreamVideo client={client}>
         <StreamCall call={call}>
           <StreamTheme>
-            {gridLayout}
-
-            <div className="absolute bottom-8 left-0 right-0 flex justify-center z-10">
-              <CallControls onLeave={onCallEnd} />
+            <PaginatedGridLayout groupSize={2} />
+            <div className="absolute bottom-10 left-0 right-0 flex justify-center z-10">
+              <div className="bg-black/40 backdrop-blur-md p-4 rounded-full flex items-center gap-6 border border-white/10 shadow-2xl">
+                <div className="hover:scale-110 transition-transform">
+                  <ToggleAudioPublishingButton />
+                </div>
+                <div className="scale-125 mx-2 hover:scale-135 transition-transform">
+                  <CancelCallButton
+                    onClick={async () => {
+                      if (window.sendCallEndMessage) {
+                        try {
+                          await window.sendCallEndMessage();
+                        } catch (error) {
+                          console.error("Error sending call end message:", error);
+                        }
+                      }
+                      onCallEnd();
+                    }}
+                  />
+                </div>
+                <div className="hover:scale-110 transition-transform">
+                  <ToggleVideoPublishingButton />
+                </div>
+              </div>
             </div>
           </StreamTheme>
         </StreamCall>
       </StreamVideo>
-
-      {showWaitingForParticipant && participantCount < 2 && !showCallEnded && (
-        <div className="absolute inset-0 bg-black bg-opacity-80 flex items-center justify-center z-[60]">
-          <div className="bg-white dark:bg-gray-800 rounded-2xl p-8 max-w-sm mx-4 shadow-2xl text-center">
-            <div className="w-16 h-16 bg-blue-100 dark:bg-blue-900 rounded-full flex items-center justify-center mx-auto mb-4">
-              <svg className="w-8 h-8 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
-              </svg>
-            </div>
-            <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
-              Đang chờ người tham gia
-            </h3>
-            <p className="text-gray-600 dark:text-gray-400 mb-6">
-              Vui lòng đợi trong giây lát...
-            </p>
-            <div className="flex space-x-2 justify-center mb-4">
-              <div className="w-2 h-2 bg-pink-500 rounded-full animate-bounce"></div>
-              <div className="w-2 h-2 bg-pink-500 rounded-full animate-bounce" style={{ animationDelay: "0.1s" }}></div>
-              <div className="w-2 h-2 bg-pink-500 rounded-full animate-bounce" style={{ animationDelay: "0.2s" }}></div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {showCallEnded && (
-        <div className="absolute inset-0 bg-black bg-opacity-80 flex items-center justify-center z-[60]">
-          <div className="bg-white dark:bg-gray-800 rounded-2xl p-8 max-w-sm mx-4 shadow-2xl text-center">
-            <div className="w-16 h-16 bg-red-100 dark:bg-red-900 rounded-full flex items-center justify-center mx-auto mb-4">
-              <svg className="w-8 h-8 text-red-600 dark:text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 8l-8 8m0-8l8 8M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z" />
-              </svg>
-            </div>
-            <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
-              Cuộc gọi đã kết thúc
-            </h3>
-            <p className="text-gray-600 dark:text-gray-400 mb-6">
-              Người kia đã rời khỏi cuộc gọi
-            </p>
-            <button
-              onClick={onCallEnd}
-              className="bg-gray-700 text-white font-semibold py-2 px-6 rounded-full hover:bg-gray-600 transition-all"
-            >
-              Trở lại
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
