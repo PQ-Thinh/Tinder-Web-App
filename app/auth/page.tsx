@@ -241,10 +241,15 @@ function AuthPage() {
     const isMobile = useMediaQuery(theme.breakpoints.down('md'));
 
     useEffect(() => {
-        if (user && !authLoading && !loading) {
+        if (authLoading || loading || view === 'verify_signup') {
+            return;
+        }
+
+        // Chỉ redirect tự động nếu đang ở màn Login/Signup bình thường mà lại có User rồi
+        if (user) {
             router.push("/");
         }
-    }, [user, authLoading, router, loading]);
+    }, [user, authLoading, router, loading, view]);
 
     useEffect(() => {
         setError("");
@@ -338,18 +343,26 @@ function AuthPage() {
                 // FIX: Sử dụng try-catch riêng cho việc cập nhật profile server
                 // Nếu verifyOtp thành công nghĩa là đã login được
                 try {
+                    // Gọi server action để đánh dấu đã verify
                     await markUserAsVerified();
-                    router.refresh();
+
+                    // KHÔNG gọi router.refresh() ở đây để tránh race condition
+                    // router.refresh(); 
+
+                    // Kiểm tra profile ngay lập tức
                     const profile = await getCurrentUserProfile();
+
                     if (profile && !profile.is_profile_completed) {
-                        router.push("/profile/edit");
+                        // Nếu chưa xong -> Vào edit (Middleware sẽ cho phép vì đúng route)
+                        window.location.href = "/profile/edit"; // Dùng window.location để force reload sạch sẽ
                     } else {
-                        router.push("/");
+                        // Nếu xong rồi -> Vào home
+                        window.location.href = "/";
                     }
                 } catch (profileError) {
-                    console.error("Profile sync error (ignored):", profileError);
-                    // Dù lỗi server action, vẫn redirect về Home vì đã login thành công
-                    router.push("/");
+                    console.error("Profile sync error:", profileError);
+                    // Fallback an toàn
+                    window.location.href = "/";
                 }
 
             } else if (view === 'login') {
