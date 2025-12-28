@@ -140,7 +140,7 @@ export default function StreamChatInterface({
           if (event.message) {
             const messageText = event.message.text || "";
             const customData = event.message as unknown as VideoCallCustomData;
-            
+
             // Handle "Call accepted" message - notify caller to enter room
             if (messageText.includes("📹 Call accepted") && event.message.user?.id !== userId) {
               console.log("Call accepted message received, notifying GlobalCallManager");
@@ -159,7 +159,7 @@ export default function StreamChatInterface({
                 window.globalCallManager.handleOutgoingCallDeclined();
               }
             }
-            
+
             // Handle regular messages (not from self)
             if (event.message.user?.id !== userId) {
               const newMsg: Message = {
@@ -232,20 +232,22 @@ export default function StreamChatInterface({
 
   async function handleVideoCall() {
     try {
-      console.log("Starting video call with user:", otherUser.id);
+      // console.log("Starting video call with user:", otherUser.id);
       const { callId } = await createVideoCall(otherUser.id);
-      console.log("Created call ID:", callId);
+      // console.log("Created call ID:", callId);
 
       if (!callId) {
-        console.error("No call ID returned");
+        // console.error("No call ID returned");
         return;
       }
 
-      // Use GlobalCallManager to handle the outgoing call
-      // Caller CHỈ hiện modal chờ, KHÔNG vào phòng call
-      // Sẽ vào phòng khi receiver accept
+
       if (window.globalCallManager) {
-        window.globalCallManager.initiateCall(callId, otherUser.full_name || "Người kia");
+        window.globalCallManager.initiateCall(
+          callId,
+          otherUser.full_name || "Người kia",
+          otherUser.id
+        );
       }
 
       // Send call invitation message
@@ -257,9 +259,9 @@ export default function StreamChatInterface({
           caller_name: otherUser.full_name || "Someone",
         };
 
-        console.log("Sending call invitation message:", messageData);
+        // console.log("Sending call invitation message:", messageData);
         const sentMessage = await channel.sendMessage(messageData as unknown as Record<string, unknown>);
-        console.log("Call invitation sent:", sentMessage);
+        // console.log("Call invitation sent:", sentMessage);
       } else {
         console.error("No channel available to send call invitation");
       }

@@ -1,17 +1,26 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { getLeaderboard } from "@/lib/actions/matches";
-import { List, ListItem, ListItemAvatar, Avatar, ListItemText, Typography, Box, Skeleton } from "@mui/material";
-import { styled, alpha } from '@mui/material/styles';
+import { getLeaderboard, type LeaderboardUser } from "@/lib/actions/matches";
+import { ListItem, ListItemAvatar, Avatar, ListItemText, Typography, Box, Skeleton } from "@mui/material"; // Bỏ List thừa
+import { alpha } from '@mui/material/styles';
 import { motion, AnimatePresence } from "framer-motion";
 import EmojiEventsIcon from '@mui/icons-material/EmojiEvents';
 import LocalFireDepartmentIcon from '@mui/icons-material/LocalFireDepartment';
 
 const VIETNAMESE_FONT = '"Be Vietnam Pro", sans-serif';
 
+interface PodiumItemProps {
+  user: LeaderboardUser;
+  rank: number;
+  height: number;
+  color: string;
+  isWinner?: boolean;
+  size: number;
+}
+
 export default function Leaderboard() {
-  const [topUsers, setTopUsers] = useState<any[]>([]);
+  const [topUsers, setTopUsers] = useState<LeaderboardUser[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -44,7 +53,7 @@ export default function Leaderboard() {
           display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1
         }}>
           <EmojiEventsIcon sx={{ color: '#FFD700', fontSize: 24 }} />
-          BẢNG VÀNG
+          TOP 10 NGƯỜI ĐƯỢC YÊU THÍCH NHẤT
         </Typography>
       </Box>
 
@@ -64,7 +73,7 @@ export default function Leaderboard() {
           {top3[2] && <PodiumItem user={top3[2]} rank={3} height={50} color="#CD7F32" size={60} />}
         </Box>
 
-        {/* LIST CÁC HẠNG TIẾP THEO (TẤT CẢ ĐỀU CÓ VIỀN) */}
+        {/* LIST CÁC HẠNG TIẾP THEO */}
         <AnimatePresence>
           {others.map((user, index) => {
             const isTop4 = index === 0;
@@ -78,19 +87,17 @@ export default function Leaderboard() {
                 transition={{ delay: index * 0.05 }}
               >
                 <Box sx={{
-                  mb: 1.2, // Khoảng cách giữa các thẻ
+                  mb: 1.2,
                   borderRadius: '16px',
-                  // --- CẤU HÌNH VIỀN GIỐNG TOP 4 ---
                   border: isTop4
                     ? '1.5px solid #FF512F'
-                    : `1.5px solid ${alpha('#a0aec0', 0.3)}`, // Top khác viền xám nhẹ hơn
+                    : `1.5px solid ${alpha('#a0aec0', 0.3)}`,
                   background: isTop4
                     ? alpha('#FF512F', 0.04)
                     : alpha('#ffffff', 0.5),
                   boxShadow: isTop4
                     ? `0 4px 12px ${alpha('#FF512F', 0.1)}`
                     : '0 2px 8px rgba(0,0,0,0.03)',
-                  // -------------------------------
                   backdropFilter: 'blur(8px)',
                   transition: 'all 0.2s ease-in-out',
                   '&:hover': {
@@ -121,25 +128,41 @@ export default function Leaderboard() {
                       />
                     </ListItemAvatar>
 
+                    {/* --- PHẦN SỬA LỖI QUAN TRỌNG --- */}
                     <ListItemText
+                      // 1. Primary: Render nội dung là div
                       primary={
-                        <Typography noWrap sx={{
-                          fontWeight: 800,
-                          fontSize: '0.85rem',
-                          color: isTop4 ? '#000' : '#4a5568'
-                        }}>
-                          {user.full_name}
+                        <Typography
+                          component="div"
+                          noWrap
+                          sx={{
+                            fontWeight: 800,
+                            fontSize: '0.85rem',
+                            color: isTop4 ? '#000' : '#4a5568'
+                          }}>
+                          {user.full_name || "Người dùng ẩn danh"}
                         </Typography>
                       }
+                      // 2. Primary Wrapper: Báo MUI dùng thẻ div thay vì span/p
+                      primaryTypographyProps={{ component: 'div' }}
+
+                      // 3. Secondary: Nội dung là Box (div)
                       secondary={
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                           <LocalFireDepartmentIcon sx={{ fontSize: 13, color: '#FF512F' }} />
-                          <Typography sx={{ fontWeight: 700, color: '#FF512F', fontSize: '0.75rem' }}>
+                          <Typography
+                            component='span' // Dùng span để nằm gọn trong Box flex
+                            sx={{ fontWeight: 700, color: '#FF512F', fontSize: '0.75rem' }}
+                          >
                             {user.like_count.toLocaleString()}
                           </Typography>
                         </Box>
                       }
+                      // 4. Secondary Wrapper: Báo MUI dùng thẻ div thay vì p (Fix lỗi nesting)
+                      secondaryTypographyProps={{ component: 'div' }}
                     />
+                    {/* ------------------------------- */}
+
                   </ListItem>
                 </Box>
               </motion.div>
@@ -151,8 +174,7 @@ export default function Leaderboard() {
   );
 }
 
-// Giữ nguyên PodiumItem và LeaderboardSkeleton như cũ...
-function PodiumItem({ user, rank, height, color, isWinner = false, size }: any) {
+function PodiumItem({ user, rank, height, color, isWinner = false, size }: PodiumItemProps) {
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: size + 10 }}>
       <Box sx={{ position: 'relative', mb: 0.5 }}>
@@ -166,7 +188,7 @@ function PodiumItem({ user, rank, height, color, isWinner = false, size }: any) 
         </Box>
       </Box>
       <Typography noWrap sx={{ fontWeight: 800, fontSize: '0.65rem', color: '#333' }}>
-        {user.full_name?.split(' ').pop()}
+        {(user.full_name || "User").split(' ').pop()}
       </Typography>
       <Typography sx={{ color: color, fontWeight: 800, fontSize: '0.75rem', mb: 0.5 }}>
         {user.like_count.toLocaleString()} 🔥
