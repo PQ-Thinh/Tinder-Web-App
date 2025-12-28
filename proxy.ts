@@ -51,9 +51,9 @@ export default async function middleware(request: NextRequest) {
     // LOGIC CHO USER
     if (user) {
         if (path.startsWith('/auth')) {
+            console.log(`[Middleware] User ${user.id} tried accessing /auth -> Force Home`)
             return NextResponse.redirect(new URL('/', request.url))
         }
-
         // Lấy thông tin profile
         // Dùng maybeSingle() để an toàn hơn (tránh lỗi nếu chưa có row)
         const { data: userProfile } = await supabase
@@ -62,7 +62,7 @@ export default async function middleware(request: NextRequest) {
             .eq('id', user.id)
             .maybeSingle()
 
-        const isCompleted = userProfile?.is_profile_completed
+        const isCompleted = userProfile?.is_profile_completed || false;
 
         // --- ĐIỂM SỬA QUAN TRỌNG 1: Check Path linh hoạt hơn ---
         // Dùng .startsWith thay vì === để bắt cả trường hợp '/profile/edit/' (có dấu / cuối)
