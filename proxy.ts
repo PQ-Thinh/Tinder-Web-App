@@ -2,7 +2,7 @@ import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
 export default async function middleware(request: NextRequest) {
-    // 1. Setup Response và Supabase Client (Giữ nguyên logic cookie của bạn)
+    // Khởi tạo response
     let response = NextResponse.next({
         request: {
             headers: request.headers,
@@ -32,44 +32,59 @@ export default async function middleware(request: NextRequest) {
         }
     )
 
-    // Lấy thông tin user
+    // Lấy user
     const { data: { user } } = await supabase.auth.getUser()
     const path = request.nextUrl.pathname
 
-    // --- 2. LOGIC CHO NGƯỜI CHƯA ĐĂNG NHẬP (GUEST) ---
-    if (!user) {
-        // Cho phép truy cập nếu là trang Auth HOẶC là trang chủ (/)
-        const isPublicRoute = path.startsWith('/auth') || path === '/';
+    // --- LOG DEBUG QUAN TRỌNG ---
+    // Xem chính xác path trên Vercel là gì (có thể là /profile/edit/ hoặc /en/profile/edit...)
+    // console.log(`[Middleware Check] Path: '${path}' | User: ${user?.id ? 'Logged In' : 'Guest'}`);
 
-        // Nếu KHÔNG PHẢI trang công khai (ví dụ cố vào /matches, /chat) -> Đá về Auth
+    // LOGIC CHO GUEST
+    if (!user) {
+        const isPublicRoute = path.startsWith('/auth') || path === '/'
         if (!isPublicRoute) {
             return NextResponse.redirect(new URL('/auth', request.url))
         }
     }
 
-    // --- 3. LOGIC CHO NGƯỜI ĐÃ ĐĂNG NHẬP (USER) ---
+    // LOGIC CHO USER
     if (user) {
-        // Nếu user đã login mà cố vào trang /auth -> Đá về trang chủ /
         if (path.startsWith('/auth')) {
             return NextResponse.redirect(new URL('/', request.url))
         }
 
-        // Logic kiểm tra Profile Completed
+        // Lấy thông tin profile
+        // Dùng maybeSingle() để an toàn hơn (tránh lỗi nếu chưa có row)
         const { data: userProfile } = await supabase
             .from('users')
             .select('is_profile_completed')
             .eq('id', user.id)
-            .single()
+            .maybeSingle()
 
         const isCompleted = userProfile?.is_profile_completed
-        const isEditingProfile = path === '/profile/edit'
-        // Regex kiểm tra file tĩnh (để tránh redirect nhầm các file ảnh/css)
-        const isStaticAsset = path.match(/\.(png|jpg|jpeg|gif|svg|ico|css|js)$/)
 
-        // Nếu chưa hoàn thiện hồ sơ & không phải đang ở trang edit & không phải file tĩnh
-        // -> Bắt buộc về trang Edit Profile
+        // --- ĐIỂM SỬA QUAN TRỌNG 1: Check Path linh hoạt hơn ---
+        // Dùng .startsWith thay vì === để bắt cả trường hợp '/profile/edit/' (có dấu / cuối)
+        // hoặc các sub-path con nếu có.
+        const isEditingProfile = path.startsWith('/profile/edit')
+
+        const isStaticAsset = path.match(/\.(png|jpg|jpeg|gif|svg|ico|css|js|woff|woff2)$/)
+
         if (!isCompleted && !isEditingProfile && !isStaticAsset) {
-            return NextResponse.redirect(new URL('/profile/edit', request.url))
+            console.log(`[Middleware] BLOCKED: Path '${path}' is not edit page. Redirecting to /profile/edit`);
+
+            const redirectUrl = new URL('/profile/edit', request.url);
+            const redirectResponse = NextResponse.redirect(redirectUrl);
+
+            // --- ĐIỂM SỬA QUAN TRỌNG 2: Copy Cookie cẩn thận hơn ---
+            // Chỉ copy những cookie quan trọng của Supabase để tránh header quá lớn hoặc xung đột
+            const cookiesToSet = response.cookies.getAll();
+            cookiesToSet.forEach(cookie => {
+                redirectResponse.cookies.set(cookie.name, cookie.value, cookie);
+            });
+
+            return redirectResponse;
         }
     }
 
