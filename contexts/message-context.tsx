@@ -101,8 +101,13 @@ export function MessageProvider({ children }: { children: ReactNode }) {
       if (!client) return;
 
       const channel = client.channel('messaging', channelId);
-      await channel.watch(); // Ensure channel is watched before marking as read
-      await channel.markRead();
+      try {
+        await channel.watch();
+        await channel.markRead();
+      } catch (err) {
+        console.warn("⚠️ Không thể mark read channel (có thể do chưa khởi tạo):", channelId);
+        return; // Dừng lại nếu lỗi, không update state bên dưới
+      }
 
       if (isMountedRef.current) {
         setUnreadByChannel((prev) => {
@@ -155,7 +160,7 @@ export function MessageProvider({ children }: { children: ReactNode }) {
       let streamChannels: Channel[] = [];
 
       if (channelIds.length > 0) {
-        const filters: ChannelFilters = { type: 'messaging', id: { $in: channelIds } };
+        const filters: ChannelFilters = { type: 'messaging', id: { $in: channelIds }, members: { $in: [userId] } };
         const sort: ChannelSort = { last_message_at: -1 };
         const options: ChannelOptions = { limit: 50, state: true, watch: true };
         streamChannels = await client.queryChannels(filters, sort, options);

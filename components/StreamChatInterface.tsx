@@ -6,7 +6,6 @@ import {
   createVideoCall,
   getStreamUserToken,
 } from "@/lib/actions/stream";
-import { useRouter } from "next/navigation";
 import {
   RefObject,
   useEffect,
@@ -14,11 +13,9 @@ import {
   useRef,
   useState,
 } from "react";
-import { Channel, Event, StreamChat, MessageResponse } from "stream-chat"; // Import MessageResponse
+import { Channel, Event, StreamChat, MessageResponse, Attachment } from "stream-chat";
 
-// --- 1. ĐỊNH NGHĨA CÁC INTERFACE ---
-
-// Interface cho tin nhắn hiển thị ở Client
+// --- TYPES ---
 interface Message {
   id: string;
   text: string;
@@ -27,13 +24,25 @@ interface Message {
   user_id: string;
 }
 
-// Interface cho dữ liệu cuộc gọi đính kèm trong tin nhắn
-// Kế thừa Record<string, unknown> để tương thích với kiểu dữ liệu của StreamChat
-interface VideoCallCustomData extends Record<string, unknown> {
+// Interface Payload gửi đi
+interface VideoCallData {
+  call_id: string;
+  caller_id: string;
+  caller_name?: string; // Tên người gọi (Sender)
+  caller_image?: string; // Ảnh người gọi (Sender)
+  text: string;
+  [key: string]: unknown;
+}
+
+interface CustomEventMessage extends MessageResponse {
   call_id?: string;
   caller_id?: string;
   caller_name?: string;
-  text?: string;
+  extraData?: {
+    call_id?: string;
+    caller_id?: string;
+    [key: string]: unknown;
+  };
 }
 
 export default function StreamChatInterface({
@@ -46,8 +55,6 @@ export default function StreamChatInterface({
   onCallStart?: (callId: string) => void;
 }) {
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [currentUserId, setCurrentUserId] = useState<string>("");
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState<string>("");
   const [isTyping, setIsTyping] = useState<boolean>(false);
@@ -55,16 +62,14 @@ export default function StreamChatInterface({
   const [client, setClient] = useState<StreamChat | null>(null);
   const [channel, setChannel] = useState<Channel | null>(null);
 
+  const [currentUserId, setCurrentUserId] = useState<string>("");
+  // 👇 THÊM STATE NÀY ĐỂ LƯU TÊN & ẢNH CỦA MÌNH
+  const [currentUserName, setCurrentUserName] = useState<string>("");
+  const [currentUserImage, setCurrentUserImage] = useState<string>("");
+
   const [showScrollButton, setShowScrollButton] = useState<boolean>(false);
-
-  // Video call states - now managed by GlobalCallManager
-
-
-
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
-
-  const router = useRouter();
 
   function scrollToBottom() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -73,8 +78,7 @@ export default function StreamChatInterface({
 
   function handleScroll() {
     if (messagesContainerRef.current) {
-      const { scrollTop, scrollHeight, clientHeight } =
-        messagesContainerRef.current;
+      const { scrollTop, scrollHeight, clientHeight } = messagesContainerRef.current;
       const isNearBottom = scrollHeight - scrollTop - clientHeight < 100;
       setShowScrollButton(!isNearBottom);
     }
@@ -86,362 +90,200 @@ export default function StreamChatInterface({
 
   useEffect(() => {
     const container = messagesContainerRef.current;
-
     if (container) {
       container.addEventListener("scroll", handleScroll);
       return () => container.removeEventListener("scroll", handleScroll);
     }
   }, [handleScroll]);
 
+  // --- INIT CHAT ---
   useEffect(() => {
+    let chatChannel: Channel | null = null;
 
     async function initializeChat() {
       try {
-        setError(null);
-
-        const { token, userId, userName, userImage } =
-          await getStreamUserToken();
+        const { token, userId, userName, userImage } = await getStreamUserToken();
         setCurrentUserId(userId!);
+        // 👇 LƯU THÔNG TIN CỦA MÌNH VÀO STATE
+        setCurrentUserName(userName);
+        setCurrentUserImage(userImage || "");
 
-        const chatClient = StreamChat.getInstance(
-          process.env.NEXT_PUBLIC_STREAM_API_KEY!
-        );
+        const chatClient = StreamChat.getInstance(process.env.NEXT_PUBLIC_STREAM_API_KEY!);
 
-        await chatClient.connectUser(
-          {
-            id: userId!,
-            name: userName,
-            image: userImage,
-          },
-          token
-        );
-
-        const { channelType, channelId } = await createOrGetChannel(
-          otherUser.id
-        );
-
-        const chatChannel = chatClient.channel(channelType!, channelId);
-        await chatChannel.watch();
-
-        const state = await chatChannel.query({ messages: { limit: 50 } });
-
-        const convertedMessages: Message[] = state.messages.map((msg) => ({
-          id: msg.id,
-          text: msg.text || "",
-          sender: msg.user?.id === userId ? "me" : "other",
-          timestamp: new Date(msg.created_at || new Date()),
-          user_id: msg.user?.id || "",
-        }));
-
-        setMessages(convertedMessages);
-
-        chatChannel.on("message.new", (event: Event) => {
-          console.log("Received message:", event.message);
-          if (event.message) {
-            const messageText = event.message.text || "";
-            const customData = event.message as unknown as VideoCallCustomData;
-
-            // Handle "Call accepted" message - notify caller to enter room
-            if (messageText.includes("📹 Call accepted") && event.message.user?.id !== userId) {
-              console.log("Call accepted message received, notifying GlobalCallManager");
-              if (window.globalCallManager?.handleOutgoingCallAccepted) {
-                console.log("Calling handleOutgoingCallAccepted with callId:", customData.call_id);
-                window.globalCallManager.handleOutgoingCallAccepted(customData.call_id);
-              } else {
-                console.log("handleOutgoingCallAccepted function not available");
-              }
-            }
-
-            // Handle "Call declined" message - notify caller
-            if (messageText.includes("📹 Call declined") && event.message.user?.id !== userId) {
-              console.log("Call declined message received");
-              if (window.globalCallManager?.handleOutgoingCallDeclined) {
-                window.globalCallManager.handleOutgoingCallDeclined();
-              }
-            }
-
-            // Handle regular messages (not from self)
-            if (event.message.user?.id !== userId) {
-              const newMsg: Message = {
-                id: event.message.id,
-                text: messageText,
-                sender: "other",
-                timestamp: new Date(event.message.created_at || new Date()),
-                user_id: event.message.user?.id || "",
-              };
-
-              setMessages((prev) => {
-                const messageExists = prev.some((msg) => msg.id === newMsg.id);
-                if (!messageExists) {
-                  return [...prev, newMsg];
-                }
-
-                return prev;
-              });
-            }
-          }
-        });
-
-        chatChannel.on("typing.start", (event: Event) => {
-          if (event.user?.id !== userId) {
-            setIsTyping(true);
-          }
-        });
-
-        chatChannel.on("typing.stop", (event: Event) => {
-          if (event.user?.id !== userId) {
-            setIsTyping(false);
-          }
-        });
+        if (chatClient.userID !== userId) {
+          await chatClient.connectUser(
+            { id: userId!, name: userName, image: userImage },
+            token
+          );
+        }
 
         setClient(chatClient);
-        setChannel(chatChannel);
 
-        // Expose sendCallEndMessage and channel globally for GlobalCallManager
-        window.sendCallEndMessage = async () => {
-          if (chatChannel) {
-            try {
-              await chatChannel.sendMessage({
-                text: "📹 Call ended",
-              });
-            } catch (error) {
-              console.error("Error sending call end message:", error);
+        const { channelType, channelId } = await createOrGetChannel(otherUser.id);
+        chatChannel = chatClient.channel(channelType!, channelId);
+
+        await chatChannel.watch();
+        setChannel(chatChannel);
+        window.currentChatChannel = chatChannel;
+
+        const state = await chatChannel.query({ messages: { limit: 50 } });
+        setMessages(
+          state.messages.map((msg) => ({
+            id: msg.id,
+            text: msg.text || "",
+            sender: msg.user?.id === userId ? "me" : "other",
+            timestamp: new Date(msg.created_at || new Date()),
+            user_id: msg.user?.id || "",
+          }))
+        );
+
+        chatChannel.on("message.new", (event: Event) => {
+          if (event.message && event.message.user?.id !== userId) {
+            setMessages((prev) => {
+              if (prev.some((m) => m.id === event.message!.id)) return prev;
+              return [
+                ...prev,
+                {
+                  id: event.message!.id,
+                  text: event.message!.text || "",
+                  sender: "other",
+                  timestamp: new Date(event.message!.created_at || new Date()),
+                  user_id: event.message!.user?.id || "",
+                },
+              ];
+            });
+
+            const msgText = event.message.text || "";
+            const customData = event.message as unknown as CustomEventMessage;
+
+            // Xử lý logic gọi điện từ sự kiện tin nhắn
+            if (msgText.includes("📹 Call accepted") && window.globalCallManager?.handleOutgoingCallAccepted) {
+              // Ưu tiên lấy từ root, nếu không có thì lấy từ extraData
+              const callId = customData.call_id || customData.extraData?.call_id;
+              if (callId) {
+                window.globalCallManager.handleOutgoingCallAccepted(callId);
+              }
+            }
+            if (msgText.includes("📹 Call declined") && window.globalCallManager?.handleOutgoingCallDeclined) {
+              window.globalCallManager.handleOutgoingCallDeclined();
             }
           }
-        };
+        });
 
-        // Store current channel globally so GlobalCallManager can use it
-        window.currentChatChannel = chatChannel;
+        chatChannel.on("typing.start", (e) => e.user?.id !== userId && setIsTyping(true));
+        chatChannel.on("typing.stop", (e) => e.user?.id !== userId && setIsTyping(false));
+
       } catch (error) {
-        console.error(error);
+        console.error("Chat Init Error:", error);
       } finally {
         setLoading(false);
       }
     }
 
-    if (otherUser) {
-      initializeChat();
-    }
+    if (otherUser) initializeChat();
 
     return () => {
-      if (client) {
-        client.disconnectUser();
-      }
+      if (chatChannel) chatChannel.stopWatching();
     };
   }, [otherUser]);
 
+  // --- ACTIONS ---
   async function handleVideoCall() {
     try {
-      // console.log("Starting video call with user:", otherUser.id);
       const { callId } = await createVideoCall(otherUser.id);
-      // console.log("Created call ID:", callId);
+      if (!callId) return;
 
-      if (!callId) {
-        // console.error("No call ID returned");
-        return;
-      }
+      // Hiển thị modal chờ phía người gọi (Sender)
+      // InitiateCall: Hiện tên người MÌNH ĐANG GỌI (otherUser) -> Đúng
+      window.globalCallManager?.initiateCall(callId, otherUser.full_name || "Người kia");
 
-
-      if (window.globalCallManager) {
-        window.globalCallManager.initiateCall(
-          callId,
-          otherUser.full_name || "Người kia",
-          otherUser.id
-        );
-      }
-
-      // Send call invitation message
+      // Gửi tin nhắn mời cho người nhận (Receiver)
       if (channel) {
-        const messageData: VideoCallCustomData = {
+        const messagePayload: VideoCallData = {
           text: `📹 Video call invitation`,
           call_id: callId,
           caller_id: currentUserId,
-          caller_name: otherUser.full_name || "Someone",
+          // 👇 [FIXED] GỬI TÊN CỦA MÌNH (Sender), KHÔNG PHẢI TÊN NGƯỜI NHẬN
+          caller_name: currentUserName,
+          caller_image: currentUserImage,
         };
 
-        // console.log("Sending call invitation message:", messageData);
-        const sentMessage = await channel.sendMessage(messageData as unknown as Record<string, unknown>);
-        // console.log("Call invitation sent:", sentMessage);
-      } else {
-        console.error("No channel available to send call invitation");
+        await channel.sendMessage(messagePayload as unknown as Record<string, unknown>);
       }
     } catch (error) {
-      console.error("Error in handleVideoCall:", error);
+      console.error("Video Call Error:", error);
     }
   }
 
-  useImperativeHandle(ref, () => ({
-    handleVideoCall,
-  }));
-
   async function handleSendMessage(e: React.FormEvent) {
     e.preventDefault();
-    if (newMessage.trim() && channel) {
-      try {
-        const response = await channel.sendMessage({
-          text: newMessage.trim(),
-        });
+    if (!newMessage.trim() || !channel) return;
 
-        const message: Message = {
-          id: response.message.id,
+    try {
+      const resp = await channel.sendMessage({ text: newMessage.trim() });
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: resp.message.id,
           text: newMessage.trim(),
           sender: "me",
           timestamp: new Date(),
           user_id: currentUserId,
-        };
-
-        setMessages((prev) => {
-          const messageExists = prev.some((msg) => msg.id === message.id);
-          if (!messageExists) {
-            return [...prev, message];
-          }
-
-          return prev;
-        });
-
-        setNewMessage("");
-      } catch (error) {
-        console.error("Error sending message:", error);
-      }
+        },
+      ]);
+      setNewMessage("");
+    } catch (err) {
+      console.error(err);
     }
   }
 
+  useImperativeHandle(ref, () => ({ handleVideoCall }));
 
-
-  function formatTime(date: Date) {
-    return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-  }
-
-  if (!client || !channel) {
+  if (loading) {
     return (
       <div className="flex-1 flex items-center justify-center bg-white dark:bg-gray-900">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-pink-500 mx-auto"></div>
-          <p className="mt-4 text-gray-600 dark:text-gray-400">
-            Đang thiết lập trò chuyện...
-          </p>
-        </div>
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-pink-500"></div>
       </div>
     );
   }
 
   return (
     <div className="h-full flex flex-col bg-white dark:bg-gray-900">
-      <div
-        ref={messagesContainerRef}
-        className="flex-1 overflow-y-auto p-4 space-y-4 scroll-smooth chat-scrollbar relative"
-        style={{ scrollBehavior: "smooth" }}
-      >
-        {messages.map((message) => (
-          <div
-            key={message.id}
-            className={`flex ${message.sender === "me" ? "justify-end" : "justify-start"
-              }`}
-          >
-            <div
-              className={`max-w-xs lg:max-w-md px-4 py-2 rounded-2xl ${message.sender === "me"
-                ? "bg-gradient-to-r from-pink-500 to-red-500 text-white"
-                : "bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-white"
-                }`}
-            >
-              <p className="text-sm">{message.text}</p>
-              <p
-                className={`text-xs mt-1 ${message.sender === "me"
-                  ? "text-pink-100"
-                  : "text-gray-500 dark:text-gray-400"
-                  }`}
-              >
-                {formatTime(message.timestamp)}
+      <div ref={messagesContainerRef} className="flex-1 overflow-y-auto p-4 space-y-4 scroll-smooth chat-scrollbar">
+        {messages.map((msg) => (
+          <div key={msg.id} className={`flex ${msg.sender === "me" ? "justify-end" : "justify-start"}`}>
+            <div className={`max-w-xs lg:max-w-md px-4 py-2 rounded-2xl ${msg.sender === "me" ? "bg-gradient-to-r from-pink-500 to-red-500 text-white" : "bg-gray-200 dark:bg-gray-700 dark:text-white"
+              }`}>
+              <p className="text-sm">{msg.text}</p>
+              <p className={`text-xs mt-1 ${msg.sender === "me" ? "text-pink-100" : "text-gray-500"}`}>
+                {msg.timestamp.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
               </p>
             </div>
           </div>
         ))}
-
-        {isTyping && (
-          <div className="flex justify-start">
-            <div className="bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-white px-4 py-2 rounded-2xl">
-              <div className="flex space-x-1">
-                <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
-                <div
-                  className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"
-                  style={{ animationDelay: "0.1s" }}
-                ></div>
-                <div
-                  className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"
-                  style={{ animationDelay: "0.2s" }}
-                ></div>
-              </div>
-            </div>
-          </div>
-        )}
-
+        {isTyping && <div className="text-gray-400 text-xs px-4">Đang nhập...</div>}
         <div ref={messagesEndRef} />
       </div>
 
       {showScrollButton && (
-        <div className="absolute bottom-20 right-6 z-10">
-          <button
-            onClick={scrollToBottom}
-            className="bg-pink-500 hover:bg-pink-600 text-white p-3 rounded-full shadow-lg transition-all duration-200 hover:scale-110"
-            title="Cuộn xuống cuối"
-          >
-            <svg
-              className="w-5 h-5"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M19 14l-7 7m0 0l-7-7m7 7V3"
-              />
-            </svg>
-          </button>
-        </div>
+        <button onClick={scrollToBottom} className="absolute bottom-20 right-6 bg-pink-500 text-white p-3 rounded-full shadow-lg z-10">
+          ⬇
+        </button>
       )}
 
       <div className="border-t border-gray-200 dark:border-gray-700 p-4">
-        <form className="flex space-x-2" onSubmit={handleSendMessage}>
+        <form onSubmit={handleSendMessage} className="flex space-x-2">
           <input
-            type="text"
             value={newMessage}
             onChange={(e) => {
               setNewMessage(e.target.value);
-
-              if (channel && e.target.value.length > 0) {
-                channel.keystroke();
-              }
-            }}
-            onFocus={(e) => {
-              if (channel) {
-                channel.keystroke();
-              }
+              channel?.keystroke();
             }}
             placeholder="Nhập tin nhắn..."
-            className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-full focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent dark:bg-gray-800 dark:text-white"
-            disabled={!channel}
+            className="flex-1 px-4 py-2 border rounded-full focus:ring-2 focus:ring-pink-500 dark:bg-gray-800 dark:text-white"
           />
-
-          <button
-            type="submit"
-            disabled={!newMessage.trim() || !channel}
-            className="px-6 py-2 bg-gradient-to-r from-pink-500 to-red-500 text-white rounded-full hover:from-pink-600 hover:to-red-600 focus:outline-none focus:ring-2 focus:ring-pink-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
-          >
-            <svg
-              className="w-5 h-5"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M5 12h14m-7-7l7 7-7 7"
-              />
-            </svg>
+          <button type="submit" disabled={!newMessage.trim()} className="px-6 py-2 bg-pink-500 text-white rounded-full hover:bg-pink-600 disabled:opacity-50">
+            Gửi
           </button>
         </form>
       </div>
