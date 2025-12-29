@@ -1,113 +1,128 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { StreamChat, Event, Channel } from "stream-chat";
+// Import Channel để dùng cho Window Interface
+import { StreamChat, Event, MessageResponse, Channel } from "stream-chat";
 import { getStreamUserToken } from "@/lib/actions/stream";
 import VideoCall from "./VideoCall";
 
+// --- TYPE DEFINITIONS ---
+
+// Mở rộng Window Interface
 declare global {
   interface Window {
+    currentChatChannel?: Channel;
+    sendCallEndMessage?: () => Promise<void>;
     globalCallManager?: {
       initiateCall: (callId: string, calleeName: string) => void;
       handleCallerVideoCall: (callId: string) => void;
       handleOutgoingCallAccepted: (callId?: string) => void;
       handleOutgoingCallDeclined: () => void;
     };
-    currentChatChannel?: Channel;
-    sendCallEndMessage?: () => Promise<void>;
   }
 }
 
-// Interface cho dữ liệu cuộc gọi đính kèm trong tin nhắn
-interface VideoCallCustomData extends Record<string, unknown> {
+// Interface tin nhắn nhận được
+interface CustomStreamMessage extends MessageResponse {
   call_id?: string;
   caller_id?: string;
   caller_name?: string;
   caller_image?: string;
-  text?: string;
-  acceptor_id?: string;
-  decliner_id?: string;
-  canceller_id?: string;
-  call_accepted?: boolean;
-  call_declined?: boolean;
-  call_cancelled?: boolean;
+  // Hỗ trợ cả trường hợp data nằm trong extraData
+  extraData?: {
+    call_id?: string;
+    caller_id?: string;
+    [key: string]: unknown;
+  };
+}
+
+// Interface payload gửi đi
+interface CallActionPayload {
+  text: string;
+  call_id: string;
+  [key: string]: unknown;
 }
 
 export default function GlobalCallManager() {
+  // --- STATE ---
   const [incomingCallId, setIncomingCallId] = useState<string>("");
   const [callerId, setCallerId] = useState<string>("");
   const [callerName, setCallerName] = useState<string>("");
   const [callerImage, setCallerImage] = useState<string>("");
-  const [showIncomingCall, setShowIncomingCall] = useState(false);
 
-  // Outgoing call states
-  const [outgoingCallId, setOutgoingCallId] = useState<string>("");
+  const [outgoingCallId, setOutgoingCallId] = useState<string>(""); // Thêm state này
   const [calleeName, setCalleeName] = useState<string>("");
-  const [showOutgoingCall, setShowOutgoingCall] = useState(false);
 
-  const [activeCallId, setActiveCallId] = useState<string>("");
+  const [showIncomingCall, setShowIncomingCall] = useState(false);
+  const [showOutgoingCall, setShowOutgoingCall] = useState(false);
   const [showActiveCall, setShowActiveCall] = useState(false);
   const [showCallEnded, setShowCallEnded] = useState(false);
 
-  const [client, setClient] = useState<StreamChat | null>(null);
-  const [updateCounter, setUpdateCounter] = useState(0);
+  const [activeCallId, setActiveCallId] = useState<string>("");
 
+  const [client, setClient] = useState<StreamChat | null>(null);
+
+  // --- LISTENER ---
   useEffect(() => {
     let chatClient: StreamChat | null = null;
 
-    // Handle incoming call invitations and cancellations
     const handleGlobalMessage = (event: Event) => {
-      const customData = event.message as unknown as VideoCallCustomData;
-      const currentUserId = chatClient?.userID;
+      // Ép kiểu an toàn
+      const msg = event.message as unknown as CustomStreamMessage;
 
-      // Handle incoming call invitation (for receiver)
-      if (event.message?.text?.includes("📹 Video call invitation")) {
-        if (customData.caller_id && customData.caller_id !== currentUserId) {
-          setIncomingCallId(customData.call_id || "");
-          setCallerId(customData.caller_id);
-          setCallerName(customData.caller_name || event.user?.name || "Ai đó");
-          setCallerImage(customData.caller_image || event.user?.image || "");
+      // Lấy data an toàn (ưu tiên extraData nếu có)
+      const receivedCallId = (msg.call_id || msg.extraData?.call_id || "") as string;
+      const receivedCallerId = (msg.caller_id || msg.extraData?.caller_id || "") as string;
+      const receivedCallerName = (msg.caller_name || msg.user?.name || "Ai đó") as string;
+
+      const myId = chatClient?.userID;
+
+      // 1. XỬ LÝ LỜI MỜI GỌI ĐẾN
+      if (msg.text?.includes("📹 Video call invitation")) {
+        console.log(`📞 Incoming Call Detected: ${receivedCallId} from ${receivedCallerId}`);
+
+        // Chỉ hiện nếu có ID và không phải mình tự gọi
+        if (receivedCallId && receivedCallerId && receivedCallerId !== myId) {
+          setIncomingCallId(receivedCallId);
+          setCallerId(receivedCallerId);
+          setCallerName(receivedCallerName);
+          setCallerImage((msg.user?.image || "") as string);
           setShowIncomingCall(true);
         }
       }
 
-      // Handle call cancelled (for receiver) - caller cancelled the call
-      if (event.message?.text?.includes("📹 Call cancelled")) {
-        const cancelledCallId = customData.call_id;
-        const cancellerId = customData.canceller_id;
+      // 2. XỬ LÝ ĐỐI PHƯƠNG HỦY GỌI (CANCEL)
+      if (msg.text?.includes("📹 Call cancelled")) {
+        console.log(`🚫 Call Cancelled Event: ${receivedCallId}`);
 
-        // If someone cancelled a call and we have an incoming call with that ID
-        if (cancelledCallId && cancelledCallId === incomingCallId) {
-          console.log("Call cancelled by caller, dismissing incoming call modal");
-          setShowIncomingCall(false);
-          setIncomingCallId("");
-          setCallerId("");
-          setCallerName("");
-          setCallerImage("");
-        }
+        // Nếu ID cuộc gọi hủy trùng với cuộc gọi đang chờ -> Đóng Modal
+        // Lưu ý: So sánh receivedCallId với incomingCallId hiện tại
+        setIncomingCallId((currentIncomingId) => {
+          if (receivedCallId === currentIncomingId) {
+            console.log("✅ Closing Incoming Modal due to Cancel");
+            setShowIncomingCall(false);
+            return ""; // Reset state
+          }
+          return currentIncomingId;
+        });
       }
     };
 
     async function initGlobalListener() {
       try {
         const { token, userId, userName, userImage } = await getStreamUserToken();
-
         if (!userId) return;
 
         chatClient = StreamChat.getInstance(process.env.NEXT_PUBLIC_STREAM_API_KEY!);
 
+        // Chỉ connect nếu chưa connect
         if (chatClient.userID !== userId) {
           await chatClient.connectUser(
-            {
-              id: userId,
-              name: userName,
-              image: userImage,
-            },
+            { id: userId, name: userName, image: userImage },
             token
           );
         }
 
-        // 2. Đăng ký sự kiện global cho invitations
         chatClient.on("notification.message_new", handleGlobalMessage);
         chatClient.on("message.new", handleGlobalMessage);
 
@@ -119,285 +134,190 @@ export default function GlobalCallManager() {
 
     initGlobalListener();
 
-    // 3. Cleanup: Hủy đúng hàm handler đã đăng ký
     return () => {
       if (chatClient) {
         chatClient.off("notification.message_new", handleGlobalMessage);
         chatClient.off("message.new", handleGlobalMessage);
       }
     };
-  }, []);
+  }, []); // Bỏ dependency incomingCallId để tránh re-bind liên tục
 
-  // Accept/decline messages are handled by the global listener above
+  // --- ACTIONS ---
 
-  const handleAcceptCall = async () => {
-    // Use the shared channel from StreamChatInterface
-    const channel = window.currentChatChannel;
-
-    if (channel && incomingCallId) {
-      try {
-        const currentUserId = client?.userID;
-
-        const acceptanceData = {
-          text: `📹 Call accepted - joining now`,
-          call_id: incomingCallId,
-          acceptor_id: currentUserId,
-          call_accepted: true,
-        };
-
-        await channel.sendMessage(acceptanceData);
-        console.log("Sent call acceptance message from GlobalCallManager");
-      } catch (error) {
-        console.error("Error sending acceptance message:", error);
-      }
-    }
-
-    setShowIncomingCall(false);
-    setActiveCallId(incomingCallId);
-    setShowActiveCall(true);
-
-    setIncomingCallId("");
-    setCallerId("");
-    setCallerName("");
-    setCallerImage("");
-  };
-
-  const handleDeclineCall = async () => {
-    // Use the shared channel from StreamChatInterface
-    const channel = window.currentChatChannel;
-
-    if (channel && incomingCallId) {
-      try {
-        const currentUserId = client?.userID;
-
-        const declineData = {
-          text: `📹 Call declined`,
-          call_id: incomingCallId,
-          decliner_id: currentUserId,
-          call_declined: true,
-        };
-
-        await channel.sendMessage(declineData);
-        console.log("Sent call decline message from GlobalCallManager");
-      } catch (error) {
-        console.error("Error sending decline message:", error);
-      }
-    }
-
-    setShowIncomingCall(false);
-    setIncomingCallId("");
-    setCallerId("");
-    setCallerName("");
-    setCallerImage("");
-  };
-
-  // Function to initiate outgoing call (called from other components)
-  const initiateCall = (callId: string, calleeName: string) => {
-    setOutgoingCallId(callId);
-    setCalleeName(calleeName);
+  // 1. NGƯỜI GỌI: Bắt đầu gọi
+  const initiateCall = (callId: string, name: string) => {
+    setActiveCallId(callId);
+    setOutgoingCallId(callId); // Lưu lại để dùng khi hủy
+    setCalleeName(name);
     setShowOutgoingCall(true);
   };
 
+  // 2. NGƯỜI GỌI: Hủy cuộc gọi (QUAN TRỌNG: Gửi tin nhắn báo hủy)
   const handleCancelOutgoingCall = async () => {
-    // Send call cancelled message to sync with receiver
     const channel = window.currentChatChannel;
     if (channel && outgoingCallId) {
       try {
-        const currentUserId = client?.userID;
-        const cancelData = {
-          text: `📹 Call cancelled`,
+        const payload: CallActionPayload = {
+          text: `📹 Call cancelled`, // Text này phải khớp với logic check ở trên
           call_id: outgoingCallId,
-          canceller_id: currentUserId,
-          call_cancelled: true,
         };
-        await channel.sendMessage(cancelData);
-        console.log("Sent call cancelled message");
+        // Gửi tin nhắn để bên kia biết mà đóng Modal
+        await channel.sendMessage(payload as unknown as Record<string, unknown>);
+        console.log("📤 Sent Cancel Signal for:", outgoingCallId);
       } catch (error) {
-        console.error("Error sending cancel message:", error);
+        console.error("Error sending cancel:", error);
       }
     }
 
+    // Đóng Modal phía mình
     setShowOutgoingCall(false);
     setOutgoingCallId("");
     setCalleeName("");
   };
 
-  const handleOutgoingCallAccepted = (callId?: string) => {
-    const idToUse = callId || outgoingCallId;
-    if (idToUse) {
-      setShowOutgoingCall(false);
-      setActiveCallId(idToUse);
-      setShowActiveCall(true);
-      setOutgoingCallId("");
-      setCalleeName("");
-      setUpdateCounter(prev => prev + 1); // Force re-render
+  // 3. NGƯỜI NHẬN: Chấp nhận
+  const handleAcceptCall = async () => {
+    // Check lại lần cuối xem cuộc gọi còn valid không (tránh race condition)
+    if (!incomingCallId) {
+      setShowIncomingCall(false);
+      return;
     }
-  };
 
-  const handleOutgoingCallDeclined = () => {
-    setShowOutgoingCall(false);
-    setOutgoingCallId("");
-    setCalleeName("");
-    // Could show a brief notification here if needed
-  };
-
-  const handleCallerVideoCall = (callId: string) => {
-    setActiveCallId(callId);
+    const channel = window.currentChatChannel;
+    if (channel) {
+      const payload: CallActionPayload = {
+        text: `📹 Call accepted - joining now`,
+        call_id: incomingCallId,
+        call_accepted: true,
+      };
+      await channel.sendMessage(payload as unknown as Record<string, unknown>);
+    }
+    setShowIncomingCall(false);
+    setActiveCallId(incomingCallId);
     setShowActiveCall(true);
   };
 
-  const handleCallEnd = () => {
-    // Reset all call states first
-    setShowActiveCall(false);
-    setActiveCallId("");
-    setShowOutgoingCall(false);
-    setOutgoingCallId("");
-    setCalleeName("");
+  // 4. NGƯỜI NHẬN: Từ chối
+  const handleDeclineCall = async () => {
+    const channel = window.currentChatChannel;
+    if (channel && incomingCallId) {
+      const payload: CallActionPayload = {
+        text: `📹 Call declined`,
+        call_id: incomingCallId,
+        call_declined: true,
+      };
+      await channel.sendMessage(payload as unknown as Record<string, unknown>);
+    }
     setShowIncomingCall(false);
-    setIncomingCallId("");
-    setCallerId("");
-    setCallerName("");
-    setCallerImage("");
+  };
 
-    // Show call ended modal
+  const handleCallEnd = () => {
+    setShowActiveCall(false);
+    setShowOutgoingCall(false);
+    setShowIncomingCall(false);
     setShowCallEnded(true);
-    // Auto-close after 3 seconds
     setTimeout(() => setShowCallEnded(false), 3000);
   };
 
-  // Expose functions to window for global access
   useEffect(() => {
     window.globalCallManager = {
       initiateCall,
-      handleCallerVideoCall,
-      handleOutgoingCallAccepted,
-      handleOutgoingCallDeclined,
+      handleCallerVideoCall: (id) => { setActiveCallId(id); setShowActiveCall(true); },
+      handleOutgoingCallAccepted: (id) => {
+        const targetId = id || activeCallId;
+        if (targetId) {
+          setShowOutgoingCall(false);
+          setActiveCallId(targetId);
+          setShowActiveCall(true);
+        }
+      },
+      handleOutgoingCallDeclined: () => {
+        setShowOutgoingCall(false);
+        alert("Người nhận đã từ chối cuộc gọi.");
+      },
     };
-    return () => {
-      delete window.globalCallManager;
-    };
-  }, []);
+  }, [activeCallId, outgoingCallId]); // Thêm outgoingCallId vào dependency
 
   if (!showIncomingCall && !showOutgoingCall && !showActiveCall && !showCallEnded) return null;
 
   return (
     <>
-      {/* --- MODAL CUỘC GỌI ĐI (OUTGOING CALL) --- */}
+      {/* --- OUTGOING MODAL (NGƯỜI GỌI) --- */}
       {showOutgoingCall && (
-        <div className="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-[9999] backdrop-blur-sm">
-          <div className="bg-white dark:bg-gray-800 rounded-2xl p-8 max-w-sm mx-4 shadow-2xl animate-pulse-fade border border-gray-200 dark:border-gray-700">
-            <div className="text-center">
-              <div className="w-20 h-20 rounded-full bg-blue-100 dark:bg-blue-900 flex items-center justify-center mx-auto mb-4 animate-pulse">
-                <svg className="w-10 h-10 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                </svg>
-              </div>
-              <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
-                Đang chờ người kia bắt máy
-              </h3>
-              <p className="text-gray-600 dark:text-gray-400 mb-6">
-                Đang gọi cho <span className="font-bold">{calleeName}</span>
-              </p>
-              <div className="flex justify-center mb-4">
-                <div className="w-3 h-3 bg-pink-500 rounded-full animate-bounce"></div>
-                <div className="w-3 h-3 bg-pink-500 rounded-full animate-bounce mx-2" style={{ animationDelay: "0.1s" }}></div>
-                <div className="w-3 h-3 bg-pink-500 rounded-full animate-bounce" style={{ animationDelay: "0.2s" }}></div>
-              </div>
-              <div className="flex space-x-3">
-                <button
-                  onClick={handleCancelOutgoingCall}
-                  className="flex-1 bg-red-500 text-white py-3 px-6 rounded-full font-semibold hover:bg-red-600 transition-colors duration-200"
-                >
-                  Hủy cuộc gọi
-                </button>
-                <button
-                  onClick={handleCancelOutgoingCall}
-                  className="bg-gray-700 text-white py-3 px-6 rounded-full font-semibold hover:bg-gray-600 transition-colors duration-200"
-                >
-                  Đóng
-                </button>
-              </div>
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[9999]">
+          <div className="bg-white p-6 rounded-2xl text-center min-w-[300px]">
+            <h3 className="text-xl font-bold mb-4 text-gray-900">Đang gọi {calleeName}...</h3>
+            <div className="flex justify-center my-6">
+              <span className="relative flex h-4 w-4">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-pink-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-4 w-4 bg-pink-500"></span>
+              </span>
             </div>
+            <p className="mb-6 text-gray-600">🔔 Đang chờ bắt máy...</p>
+
+            {/* NÚT HỦY GỌI QUAN TRỌNG */}
+            <button
+              onClick={handleCancelOutgoingCall}
+              className="bg-red-500 hover:bg-red-600 text-white px-8 py-2 rounded-full font-semibold transition-colors"
+            >
+              Hủy
+            </button>
           </div>
         </div>
       )}
 
-      {/* --- MODAL THÔNG BÁO CUỘC GỌI ĐẾN --- */}
+      {/* --- INCOMING MODAL (NGƯỜI NHẬN) --- */}
       {showIncomingCall && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999] backdrop-blur-sm">
-          <div className="bg-white dark:bg-gray-800 rounded-2xl p-8 max-w-sm mx-4 shadow-2xl animate-pulse-fade border border-gray-200 dark:border-gray-700">
-            <div className="text-center">
-              <div className="w-20 h-20 rounded-full overflow-hidden mx-auto mb-4 border-4 border-pink-500 relative">
-                <img
-                  src={callerImage || "/default-avatar.png"}
-                  alt={callerName}
-                  className="w-full h-full object-cover"
-                  onError={(e) => {
-                    e.currentTarget.src = "/default-avatar.png";
-                  }}
-                />
-              </div>
-              <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
-                Cuộc gọi Video đến
-              </h3>
-              <p className="text-gray-600 dark:text-gray-400 mb-6">
-                <span className="font-bold">{callerName}</span> đang gọi cho bạn...
-              </p>
-              <div className="flex space-x-4">
-                <button
-                  onClick={handleDeclineCall}
-                  className="flex-1 bg-red-500 text-white py-3 px-6 rounded-full font-semibold hover:bg-red-600 transition-colors duration-200"
-                >
-                  Từ chối
-                </button>
-                <button
-                  onClick={handleAcceptCall}
-                  className="flex-1 bg-green-500 text-white py-3 px-6 rounded-full font-semibold hover:bg-green-600 transition-colors duration-200"
-                >
-                  Nghe máy
-                </button>
-              </div>
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[9999]">
+          <div className="bg-white p-6 rounded-2xl text-center shadow-2xl border-4 border-pink-500 min-w-[320px] animate-bounce-in">
+            <div className="relative w-24 h-24 mx-auto mb-4">
+              <img
+                src={callerImage || "/default-avatar.png"}
+                className="w-full h-full rounded-full object-cover border-2 border-gray-100"
+                onError={(e) => e.currentTarget.src = "/default-avatar.png"}
+              />
+              <div className="absolute bottom-0 right-0 w-6 h-6 bg-green-500 border-2 border-white rounded-full animate-pulse"></div>
+            </div>
+
+            <h3 className="text-xl font-bold mb-1 text-gray-900">{callerName}</h3>
+            <p className="text-pink-500 font-medium mb-6">đang gọi video cho bạn...</p>
+
+            <div className="flex gap-4 justify-center">
+              <button
+                onClick={handleDeclineCall}
+                className="bg-gray-200 hover:bg-gray-300 text-gray-800 px-6 py-3 rounded-full font-bold transition-colors"
+              >
+                Từ chối
+              </button>
+              <button
+                onClick={handleAcceptCall}
+                className="bg-green-500 hover:bg-green-600 text-white px-8 py-3 rounded-full font-bold shadow-lg shadow-green-500/30 animate-pulse"
+              >
+                Nghe máy
+              </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* --- GIAO DIỆN CUỘC GỌI VIDEO --- */}
+      {/* ACTIVE CALL */}
       {showActiveCall && activeCallId && (
-        <div className="fixed inset-0 z-[9999]">
+        <div className="fixed inset-0 z-[9999] bg-black">
           <VideoCall
             callId={activeCallId}
             onCallEnd={handleCallEnd}
-            isIncoming={!showOutgoingCall} // If it was an outgoing call that got accepted, it's not incoming
+            isIncoming={!showOutgoingCall}
             otherUserId={callerName || calleeName}
             isAcceptedCall={true}
           />
         </div>
       )}
 
-      {/* --- MODAL CUỘC GỌI ĐÃ KẾT THÚC --- */}
+      {/* CALL ENDED NOTIFICATION */}
       {showCallEnded && (
-        <div className="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-[9999] backdrop-blur-sm">
-          <div className="bg-white dark:bg-gray-800 rounded-2xl p-8 max-w-sm mx-4 shadow-2xl animate-pulse-fade border border-gray-200 dark:border-gray-700">
-            <div className="text-center">
-              <div className="w-20 h-20 rounded-full bg-green-100 dark:bg-green-900 flex items-center justify-center mx-auto mb-4 animate-pulse">
-                <svg className="w-10 h-10 text-green-600 dark:text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                </svg>
-              </div>
-              <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
-                Cuộc gọi đã kết thúc
-              </h3>
-              <p className="text-gray-600 dark:text-gray-400 mb-6">
-                Cảm ơn bạn đã sử dụng tính năng video call.
-              </p>
-              <button
-                onClick={() => setShowCallEnded(false)}
-                className="bg-pink-500 text-white py-3 px-6 rounded-full font-semibold hover:bg-pink-600 transition-colors duration-200"
-              >
-                Thoát
-              </button>
-            </div>
+        <div className="fixed inset-0 flex items-center justify-center z-[9999] pointer-events-none">
+          <div className="bg-black/80 text-white px-8 py-4 rounded-full backdrop-blur-md shadow-xl animate-fade-in-up">
+            Cuộc gọi đã kết thúc
           </div>
         </div>
       )}
