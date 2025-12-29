@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import { getCurrentUserProfile, markUserAsVerified } from "@/lib/actions/profile";
 import { useRouter } from "next/navigation";
 import React, { useEffect, useRef, useState, useLayoutEffect } from "react";
+import { IconButton } from "@mui/material";
 
 // --- Imports UI Libraries ---
 import gsap from "gsap";
@@ -53,6 +54,17 @@ const Icons = {
     Heart: () => (
         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="#FFC5D3" stroke="none">
             <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
+        </svg>
+    ),
+    Eye: () => (
+        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+        </svg>
+    ),
+    EyeOff: () => (
+        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88L4.512 4.512M12 5c4.478 0 8.268 2.943 9.542 7a10.057 10.057 0 01-4.404 5.584m-2.832-2.832L20 20" />
         </svg>
     )
 };
@@ -227,6 +239,8 @@ function AuthPage() {
     const [loading, setLoading] = useState<boolean>(false);
     const [error, setError] = useState<string>("");
     const [message, setMessage] = useState<string>("");
+    const [showPassword, setShowPassword] = useState(false);
+    const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
     const supabase = createClient();
     const { user, loading: authLoading } = useAuth();
@@ -496,7 +510,7 @@ function AuthPage() {
                                 <RomanticTextField
                                     fullWidth
                                     label="Mật khẩu"
-                                    type="password"
+                                    type={showPassword ? "text" : "password"}
                                     variant="outlined"
                                     value={password}
                                     onChange={(e) => setPassword(e.target.value)}
@@ -505,6 +519,17 @@ function AuthPage() {
                                         startAdornment: (
                                             <InputAdornment position="start">
                                                 <SvgIconWrapper color="#E94086"><Icons.Lock /></SvgIconWrapper>
+                                            </InputAdornment>
+                                        ),
+                                        endAdornment: (
+                                            <InputAdornment position="end">
+                                                <IconButton
+                                                    onClick={() => setShowPassword(!showPassword)}
+                                                    edge="end"
+                                                    sx={{ color: 'rgba(233, 64, 134, 0.5)' }}
+                                                >
+                                                    {showPassword ? <Icons.EyeOff /> : <Icons.Eye />}
+                                                </IconButton>
                                             </InputAdornment>
                                         ),
                                     }}
@@ -518,7 +543,7 @@ function AuthPage() {
                                 <RomanticTextField
                                     fullWidth
                                     label="Xác nhận mật khẩu"
-                                    type="password"
+                                    type={showConfirmPassword ? "text" : "password"}
                                     variant="outlined"
                                     value={confirmPassword}
                                     onChange={(e) => setConfirmPassword(e.target.value)}
@@ -527,6 +552,17 @@ function AuthPage() {
                                         startAdornment: (
                                             <InputAdornment position="start">
                                                 <SvgIconWrapper color="#E94086"><Icons.Lock /></SvgIconWrapper>
+                                            </InputAdornment>
+                                        ),
+                                        endAdornment: (
+                                            <InputAdornment position="end">
+                                                <IconButton
+                                                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                                                    edge="end"
+                                                    sx={{ color: 'rgba(233, 64, 134, 0.5)' }}
+                                                >
+                                                    {showConfirmPassword ? <Icons.EyeOff /> : <Icons.Eye />}
+                                                </IconButton>
                                             </InputAdornment>
                                         ),
                                     }}

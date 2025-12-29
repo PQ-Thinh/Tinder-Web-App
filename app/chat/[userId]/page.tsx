@@ -157,7 +157,7 @@ export default function ChatConversationPage() {
   return (
     <div
       ref={containerRef}
-      className="h-screen w-full relative overflow-hidden flex justify-center"
+      className="h-[100dvh] w-full relative overflow-hidden flex justify-center items-end"
       style={{ background: "linear-gradient(135deg, #FFDEE9 0%, #B5FFFC 100%)" }}
     >
       {/* 1. BACKGROUND EFFECTS (FLOATING SHAPES) */}
@@ -168,8 +168,7 @@ export default function ChatConversationPage() {
       </div>
 
       {/* 2. MAIN CHAT CONTAINER (GLASSMORPHISM) */}
-      <div className="chat-container w-full max-w-5xl h-full md:h-[95vh] md:my-auto relative z-10 flex flex-col bg-white/60 dark:bg-gray-900/60 backdrop-blur-2xl shadow-2xl md:rounded-[30px] border border-white/40 dark:border-gray-700/50 overflow-hidden">
-
+      <div className="chat-container w-full max-w-5xl h-full md:h-[90vh] max-h-[85dvh] relative z-10 flex flex-col bg-white/60 dark:bg-gray-900/60 backdrop-blur-2xl shadow-2xl md:rounded-[30px] border border-white/40 dark:border-gray-700/50 overflow-hidden">
         {/* Header */}
         <div className="shrink-0 bg-white/40 dark:bg-gray-800/40 backdrop-blur-md border-b border-white/30 dark:border-gray-700/30">
           <ChatHeader
