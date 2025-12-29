@@ -64,9 +64,7 @@ export default async function middleware(request: NextRequest) {
 
         const isCompleted = userProfile?.is_profile_completed || false;
 
-        // --- ĐIỂM SỬA QUAN TRỌNG 1: Check Path linh hoạt hơn ---
-        // Dùng .startsWith thay vì === để bắt cả trường hợp '/profile/edit/' (có dấu / cuối)
-        // hoặc các sub-path con nếu có.
+
         const isEditingProfile = path.startsWith('/profile/edit')
 
         const isStaticAsset = path.match(/\.(png|jpg|jpeg|gif|svg|ico|css|js|woff|woff2)$/)
