@@ -1,14 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-// Import Channel để dùng cho Window Interface
 import { StreamChat, Event, MessageResponse, Channel } from "stream-chat";
 import { getStreamUserToken } from "@/lib/actions/stream";
 import VideoCall from "./VideoCall";
+// 👇 Import useAuth để lấy ID chính xác nhất
+import { useAuth } from "@/contexts/auth-context";
 
 // --- TYPE DEFINITIONS ---
-
-// Mở rộng Window Interface
 declare global {
   interface Window {
     currentChatChannel?: Channel;
@@ -22,13 +21,11 @@ declare global {
   }
 }
 
-// Interface tin nhắn nhận được
 interface CustomStreamMessage extends MessageResponse {
   call_id?: string;
   caller_id?: string;
   caller_name?: string;
   caller_image?: string;
-  // Hỗ trợ cả trường hợp data nằm trong extraData
   extraData?: {
     call_id?: string;
     caller_id?: string;
@@ -36,10 +33,14 @@ interface CustomStreamMessage extends MessageResponse {
   };
 }
 
-// Interface payload gửi đi
 interface CallActionPayload {
   text: string;
   call_id: string;
+  // 👇 Thêm extraData vào payload gửi đi để chắc chắn
+  extraData?: {
+    call_id: string;
+    [key: string]: unknown;
+  };
   [key: string]: unknown;
 }
 
@@ -50,7 +51,7 @@ export default function GlobalCallManager() {
   const [callerName, setCallerName] = useState<string>("");
   const [callerImage, setCallerImage] = useState<string>("");
 
-  const [outgoingCallId, setOutgoingCallId] = useState<string>(""); // Thêm state này
+  const [outgoingCallId, setOutgoingCallId] = useState<string>("");
   const [calleeName, setCalleeName] = useState<string>("");
 
   const [showIncomingCall, setShowIncomingCall] = useState(false);
@@ -62,27 +63,40 @@ export default function GlobalCallManager() {
 
   const [client, setClient] = useState<StreamChat | null>(null);
 
+  // 👇 Lấy user từ AuthContext
+  const { user } = useAuth();
+
   // --- LISTENER ---
   useEffect(() => {
+    // Nếu chưa login thì chưa nghe
+    if (!user) return;
+
     let chatClient: StreamChat | null = null;
 
     const handleGlobalMessage = (event: Event) => {
-      // Ép kiểu an toàn
+      // 1. Phân tích tin nhắn
       const msg = event.message as unknown as CustomStreamMessage;
 
-      // Lấy data an toàn (ưu tiên extraData nếu có)
+      // Lấy dữ liệu an toàn từ mọi ngóc ngách
       const receivedCallId = (msg.call_id || msg.extraData?.call_id || "") as string;
       const receivedCallerId = (msg.caller_id || msg.extraData?.caller_id || "") as string;
       const receivedCallerName = (msg.caller_name || msg.user?.name || "Ai đó") as string;
 
-      const myId = chatClient?.userID;
+      // 👇 Dùng user.id từ Context (Chính xác tuyệt đối)
+      const myId = user.id;
 
-      // 1. XỬ LÝ LỜI MỜI GỌI ĐẾN
+      // Debug Log
+      if (msg.text?.includes("Video call")) {
+        console.log(`📩 Global Event: "${msg.text}"`);
+        console.log(`   - Payload ID: ${receivedCallId}`);
+        console.log(`   - Caller: ${receivedCallerId} (Me: ${myId})`);
+      }
+
+      // 2. XỬ LÝ LỜI MỜI (INVITATION)
       if (msg.text?.includes("📹 Video call invitation")) {
-        console.log(`📞 Incoming Call Detected: ${receivedCallId} from ${receivedCallerId}`);
-
-        // Chỉ hiện nếu có ID và không phải mình tự gọi
+        // Điều kiện: Có ID cuộc gọi + Người gọi KHÔNG PHẢI là mình
         if (receivedCallId && receivedCallerId && receivedCallerId !== myId) {
+          console.log("✅ Showing Incoming Modal!");
           setIncomingCallId(receivedCallId);
           setCallerId(receivedCallerId);
           setCallerName(receivedCallerName);
@@ -91,19 +105,21 @@ export default function GlobalCallManager() {
         }
       }
 
-      // 2. XỬ LÝ ĐỐI PHƯƠNG HỦY GỌI (CANCEL)
+      // 3. XỬ LÝ HỦY GỌI (CANCEL)
       if (msg.text?.includes("📹 Call cancelled")) {
-        console.log(`🚫 Call Cancelled Event: ${receivedCallId}`);
+        console.log(`🚫 Received Cancel Signal for: ${receivedCallId}`);
 
-        // Nếu ID cuộc gọi hủy trùng với cuộc gọi đang chờ -> Đóng Modal
-        // Lưu ý: So sánh receivedCallId với incomingCallId hiện tại
-        setIncomingCallId((currentIncomingId) => {
-          if (receivedCallId === currentIncomingId) {
-            console.log("✅ Closing Incoming Modal due to Cancel");
+        // Cập nhật state để đóng modal
+        // Lưu ý: Dùng functional update để lấy giá trị state mới nhất
+        setIncomingCallId((currentId) => {
+          if (receivedCallId === currentId) {
+            console.log("✅ Closing Modal (Matched ID)");
             setShowIncomingCall(false);
-            return ""; // Reset state
+            return ""; // Reset ID
+          } else {
+            console.log(`⚠️ ID Mismatch: Received ${receivedCallId} vs Current ${currentId}`);
           }
-          return currentIncomingId;
+          return currentId;
         });
       }
     };
@@ -111,22 +127,26 @@ export default function GlobalCallManager() {
     async function initGlobalListener() {
       try {
         const { token, userId, userName, userImage } = await getStreamUserToken();
-        if (!userId) return;
+        if (!userId || userId !== user?.id) return;
 
         chatClient = StreamChat.getInstance(process.env.NEXT_PUBLIC_STREAM_API_KEY!);
 
-        // Chỉ connect nếu chưa connect
         if (chatClient.userID !== userId) {
+          // Nếu client đã có user khác (rác), disconnect trước
+          if (chatClient.userID) await chatClient.disconnectUser();
+
           await chatClient.connectUser(
             { id: userId, name: userName, image: userImage },
             token
           );
         }
 
+        // Lắng nghe cả 2 loại event để chắc chắn không sót
         chatClient.on("notification.message_new", handleGlobalMessage);
         chatClient.on("message.new", handleGlobalMessage);
 
         setClient(chatClient);
+        console.log("🎧 GlobalCallManager Listening...");
       } catch (error) {
         console.error("Global Call Listener Error:", error);
       }
@@ -140,44 +160,47 @@ export default function GlobalCallManager() {
         chatClient.off("message.new", handleGlobalMessage);
       }
     };
-  }, []); // Bỏ dependency incomingCallId để tránh re-bind liên tục
+  }, [user]); // Chạy lại khi user thay đổi (Login/Logout)
 
   // --- ACTIONS ---
 
-  // 1. NGƯỜI GỌI: Bắt đầu gọi
   const initiateCall = (callId: string, name: string) => {
     setActiveCallId(callId);
-    setOutgoingCallId(callId); // Lưu lại để dùng khi hủy
+    setOutgoingCallId(callId);
     setCalleeName(name);
     setShowOutgoingCall(true);
   };
 
-  // 2. NGƯỜI GỌI: Hủy cuộc gọi (QUAN TRỌNG: Gửi tin nhắn báo hủy)
+  // 👇 [FIXED] Gửi lệnh hủy robust hơn
   const handleCancelOutgoingCall = async () => {
     const channel = window.currentChatChannel;
     if (channel && outgoingCallId) {
       try {
+        // Gửi ID ở cả root và extraData để bên kia dễ bắt
         const payload: CallActionPayload = {
-          text: `📹 Call cancelled`, // Text này phải khớp với logic check ở trên
+          text: `📹 Call cancelled`,
           call_id: outgoingCallId,
+          extraData: {
+            call_id: outgoingCallId
+          }
         };
-        // Gửi tin nhắn để bên kia biết mà đóng Modal
+        // Ép kiểu để gửi đi
         await channel.sendMessage(payload as unknown as Record<string, unknown>);
-        console.log("📤 Sent Cancel Signal for:", outgoingCallId);
+        console.log("📤 Sent Cancel Signal:", outgoingCallId);
       } catch (error) {
         console.error("Error sending cancel:", error);
       }
+    } else {
+      console.warn("⚠️ Cannot cancel: No channel or call ID");
     }
 
-    // Đóng Modal phía mình
+    // Đóng modal phía mình ngay lập tức
     setShowOutgoingCall(false);
     setOutgoingCallId("");
     setCalleeName("");
   };
 
-  // 3. NGƯỜI NHẬN: Chấp nhận
   const handleAcceptCall = async () => {
-    // Check lại lần cuối xem cuộc gọi còn valid không (tránh race condition)
     if (!incomingCallId) {
       setShowIncomingCall(false);
       return;
@@ -188,7 +211,7 @@ export default function GlobalCallManager() {
       const payload: CallActionPayload = {
         text: `📹 Call accepted - joining now`,
         call_id: incomingCallId,
-        call_accepted: true,
+        call_accepted: true, // Marker
       };
       await channel.sendMessage(payload as unknown as Record<string, unknown>);
     }
@@ -197,14 +220,13 @@ export default function GlobalCallManager() {
     setShowActiveCall(true);
   };
 
-  // 4. NGƯỜI NHẬN: Từ chối
   const handleDeclineCall = async () => {
     const channel = window.currentChatChannel;
     if (channel && incomingCallId) {
       const payload: CallActionPayload = {
         text: `📹 Call declined`,
         call_id: incomingCallId,
-        call_declined: true,
+        call_declined: true, // Marker
       };
       await channel.sendMessage(payload as unknown as Record<string, unknown>);
     }
@@ -236,13 +258,13 @@ export default function GlobalCallManager() {
         alert("Người nhận đã từ chối cuộc gọi.");
       },
     };
-  }, [activeCallId, outgoingCallId]); // Thêm outgoingCallId vào dependency
+  }, [activeCallId, outgoingCallId]);
 
   if (!showIncomingCall && !showOutgoingCall && !showActiveCall && !showCallEnded) return null;
 
   return (
     <>
-      {/* --- OUTGOING MODAL (NGƯỜI GỌI) --- */}
+      {/* OUTGOING MODAL (NGƯỜI GỌI) */}
       {showOutgoingCall && (
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[9999]">
           <div className="bg-white p-6 rounded-2xl text-center min-w-[300px]">
@@ -254,8 +276,6 @@ export default function GlobalCallManager() {
               </span>
             </div>
             <p className="mb-6 text-gray-600">🔔 Đang chờ bắt máy...</p>
-
-            {/* NÚT HỦY GỌI QUAN TRỌNG */}
             <button
               onClick={handleCancelOutgoingCall}
               className="bg-red-500 hover:bg-red-600 text-white px-8 py-2 rounded-full font-semibold transition-colors"
@@ -266,7 +286,7 @@ export default function GlobalCallManager() {
         </div>
       )}
 
-      {/* --- INCOMING MODAL (NGƯỜI NHẬN) --- */}
+      {/* INCOMING MODAL (NGƯỜI NHẬN) */}
       {showIncomingCall && (
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[9999]">
           <div className="bg-white p-6 rounded-2xl text-center shadow-2xl border-4 border-pink-500 min-w-[320px] animate-bounce-in">
@@ -313,10 +333,10 @@ export default function GlobalCallManager() {
         </div>
       )}
 
-      {/* CALL ENDED NOTIFICATION */}
+      {/* NOTIFICATION */}
       {showCallEnded && (
         <div className="fixed inset-0 flex items-center justify-center z-[9999] pointer-events-none">
-          <div className="bg-black/80 text-white px-8 py-4 rounded-full backdrop-blur-md shadow-xl animate-fade-in-up">
+          <div className="bg-black/80 text-white px-8 py-4 rounded-full backdrop-blur-md shadow-xl">
             Cuộc gọi đã kết thúc
           </div>
         </div>
