@@ -7,11 +7,10 @@ import { ChannelFilters, ChannelOptions, ChannelSort, Event as StreamEvent, Stre
 import { useAuth } from "./auth-context";
 import { UserProfile } from "@/lib/actions/profile";
 import { getUserMatches } from "@/lib/actions/matches";
-import { getUserProfileById } from "@/lib/actions/profile"; // Đảm bảo import hàm này
+import { getUserProfileById } from "@/lib/actions/profile";
 
-// Định nghĩa Interface dữ liệu Chat
 export interface ChatData {
-  id: string; // Match ID
+  id: string;
   user: UserProfile;
   lastMessage?: string;
   lastMessageTime: string;
@@ -28,12 +27,10 @@ interface MessageContextType {
   markAsRead: (channelId: string) => void;
   refreshState: () => Promise<void>;
   user: UserProfile | null;
-
-  // --- MỚI THÊM: State cho Popup Match ---
   latestMatch: UserProfile | null;
   clearLatestMatch: () => void;
 }
-// Định nghĩa cấu trúc 1 dòng trong bảng 'matches'
+
 interface MatchRow {
   id: string;
   user1_id: string;
@@ -43,8 +40,8 @@ interface MatchRow {
 }
 
 interface RealtimeMatchPayload {
-  new: MatchRow;          // Dữ liệu dòng mới
-  old: MatchRow | null;   // Dữ liệu dòng cũ
+  new: MatchRow;
+  old: MatchRow | null;
   eventType: 'INSERT' | 'UPDATE' | 'DELETE';
   schema: string;
   table: string;
@@ -54,34 +51,26 @@ interface RealtimeMatchPayload {
 
 const MessageContext = createContext<MessageContextType | undefined>(undefined);
 
-// Helper function
+// --- [QUAN TRỌNG: LOGIC PHẢI KHỚP VỚI SERVER] ---
 function generateChannelId(userId1: string, userId2: string): string {
   const sortedIds = [userId1, userId2].sort();
-  const combinedIds = sortedIds.join("_");
-  let hash = 0;
-  for (let i = 0; i < combinedIds.length; i++) {
-    const char = combinedIds.charCodeAt(i);
-    hash = (hash << 5) - hash + char;
-    hash = hash & hash;
-  }
-  return `match_${Math.abs(hash).toString(36)}`;
+  // Lấy 20 ký tự đầu của mỗi ID (giống hệt Server)
+  return `match_${sortedIds[0].slice(0, 20)}_${sortedIds[1].slice(0, 20)}`;
 }
+// --------------------------------------------------
 
 export function MessageProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const userId = user?.id;
 
-  // State
   const [unreadCount, setUnreadCount] = useState<number>(0);
   const [unreadByChannel, setUnreadByChannel] = useState<Record<string, number>>({});
   const [chatList, setChatList] = useState<ChatData[]>([]);
   const [isLoadingChats, setIsLoadingChats] = useState<boolean>(true);
   const [dataOwnerId, setDataOwnerId] = useState<string | null>(null);
 
-  // --- MỚI THÊM: State lưu Match mới nhất để hiện Popup ---
   const [latestMatch, setLatestMatch] = useState<UserProfile | null>(null);
 
-  // Refs
   const isMountedRef = useRef<boolean>(true);
   const isFetchingRef = useRef<boolean>(false);
   const lastFetchTimeRef = useRef<number>(0);
@@ -102,11 +91,11 @@ export function MessageProvider({ children }: { children: ReactNode }) {
 
       const channel = client.channel('messaging', channelId);
       try {
-        await channel.watch();
+        await channel.watch(); // Đảm bảo channel được watch trước khi mark read
         await channel.markRead();
       } catch (err) {
-        console.warn("⚠️ Không thể mark read channel (có thể do chưa khởi tạo):", channelId);
-        return; // Dừng lại nếu lỗi, không update state bên dưới
+        console.warn("⚠️ Cannot mark read (channel init warning):", channelId);
+        return;
       }
 
       if (isMountedRef.current) {
@@ -133,7 +122,6 @@ export function MessageProvider({ children }: { children: ReactNode }) {
     setLatestMatch(null);
   }, []);
 
-  // --- HÀM FETCH TOÀN DIỆN (Matches + Stream Data) ---
   const refreshState = useCallback(async () => {
     if (!userId) return;
 
@@ -160,9 +148,10 @@ export function MessageProvider({ children }: { children: ReactNode }) {
       let streamChannels: Channel[] = [];
 
       if (channelIds.length > 0) {
+        // Query channel để lấy trạng thái unread
         const filters: ChannelFilters = { type: 'messaging', id: { $in: channelIds }, members: { $in: [userId] } };
         const sort: ChannelSort = { last_message_at: -1 };
-        const options: ChannelOptions = { limit: 50, state: true, watch: true };
+        const options: ChannelOptions = { limit: 50, state: true, watch: true }; // watch: true để cập nhật realtime
         streamChannels = await client.queryChannels(filters, sort, options);
       }
 
@@ -218,7 +207,7 @@ export function MessageProvider({ children }: { children: ReactNode }) {
 
       if (isMountedRef.current) {
         setUnreadByChannel(unreadMap);
-        setUnreadCount(totalUnread);
+        setUnreadCount(totalUnread); // Cập nhật state unreadCount -> Navbar sẽ tự nhận
         setChatList(processedChatList);
         setDataOwnerId(userId);
         setIsLoadingChats(false);
@@ -245,14 +234,9 @@ export function MessageProvider({ children }: { children: ReactNode }) {
 
     const supabase = createClient();
 
-    // --- HÀM XỬ LÝ KHI CÓ MATCH MỚI ---
     const handleNewMatch = async (payload: RealtimeMatchPayload) => {
       console.log("🔔 Realtime Match Event:", payload);
-
-      // TypeScript hiểu 'newRecord' là MatchRow
       const newRecord = payload.new;
-
-      // ... logic giữ nguyên ...
       lastFetchTimeRef.current = 0;
       await refreshState();
 
@@ -261,16 +245,15 @@ export function MessageProvider({ children }: { children: ReactNode }) {
       if (partnerId) {
         try {
           const partnerProfile = await getUserProfileById(partnerId);
-          // Kiểm tra isMountedRef.current để tránh set state khi component đã unmount
           if (partnerProfile && isMountedRef.current) {
             setLatestMatch(partnerProfile);
           }
         } catch (err) {
-          // Ép kiểu error sang Error hoặc unknown để log an toàn
           console.error("Lỗi lấy thông tin match mới:", err instanceof Error ? err.message : "Unknown error");
         }
       }
     };
+
     const realtimeChannel = supabase.channel('realtime-matches-changes')
       .on(
         'postgres_changes',
@@ -292,10 +275,10 @@ export function MessageProvider({ children }: { children: ReactNode }) {
         (payload) => handleNewMatch(payload as unknown as RealtimeMatchPayload))
       .subscribe();
 
-    // --- STREAM CHAT LISTENERS ---
     let streamClient: StreamChat | null = null;
 
     const handleStreamEvent = async () => {
+      // Khi có tin nhắn mới -> refresh lại unread count
       lastFetchTimeRef.current = 0;
       await refreshState();
     };
@@ -320,19 +303,16 @@ export function MessageProvider({ children }: { children: ReactNode }) {
 
     return () => {
       supabase.removeChannel(realtimeChannel);
-
       if (streamClient) {
         streamClient.off('notification.message_new', handleStreamEvent);
         streamClient.off('message.new', handleStreamEvent);
         streamClient.off('message.read', handleStreamEvent);
         streamClient.off('notification.channel_updated', handleStreamEvent);
       }
-
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
   }, [userId, refreshState]);
 
-  // Masking Data
   const isDataFresh = userId === dataOwnerId;
   const exposedUnreadCount = (user && isDataFresh) ? unreadCount : 0;
   const exposedChatList = (user && isDataFresh) ? chatList : [];
@@ -348,8 +328,6 @@ export function MessageProvider({ children }: { children: ReactNode }) {
         markAsRead,
         refreshState,
         user: user as UserProfile | null,
-
-        // Expose state mới
         latestMatch,
         clearLatestMatch,
       }}

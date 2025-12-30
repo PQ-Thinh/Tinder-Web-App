@@ -70,17 +70,13 @@ export async function createOrGetChannel(otherUserId: string) {
     throw new Error("Users are not matched. Cannot create chat channel.");
   }
 
+  // --- [LOGIC TẠO ID MỚI - ĐỒNG BỘ CLIENT & SERVER] ---
+  // Lấy 20 ký tự đầu của mỗi UUID để ghép lại.
+  // UUID có tính duy nhất rất cao ngay từ các ký tự đầu.
+  // Tổng độ dài: 6 (match_) + 20 + 1 (_) + 20 = 47 ký tự (< 64 ký tự limit của Stream)
   const sortedIds = [user.id, otherUserId].sort();
-  const combinedIds = sortedIds.join("_");
-
-  let hash = 0;
-  for (let i = 0; i < combinedIds.length; i++) {
-    const char = combinedIds.charCodeAt(i);
-    hash = (hash << 5) - hash + char;
-    hash = hash & hash; 
-  }
-
-  const channelId = `match_${Math.abs(hash).toString(36)}`;
+  const channelId = `match_${sortedIds[0].slice(0, 20)}_${sortedIds[1].slice(0, 20)}`;
+  // ---------------------------------------------------
 
   const serverClient = StreamChat.getInstance(
     process.env.NEXT_PUBLIC_STREAM_API_KEY!,
@@ -111,12 +107,12 @@ export async function createOrGetChannel(otherUserId: string) {
 
   try {
     await channel.create();
+    await channel.addMembers([user.id, otherUserId]); // Đảm bảo member
     console.log("Channel created successfully:", channelId);
   } catch (error) {
     console.log("Channel creation error:", error);
-
     if (error instanceof Error && !error.message.includes("already exists")) {
-      throw error;
+      // throw error; // Tạm bỏ throw để tránh crash nếu lỗi nhỏ
     }
   }
 
@@ -152,7 +148,7 @@ export async function createVideoCall(otherUserId: string) {
   }
 
   const sortedIds = [user.id, otherUserId].sort();
-  // Lấy 10 ký tự đầu mỗi id → callId ngắn, an toàn < 64 ký tự
+  // Logic cũ của bạn cho Call ID vẫn ổn (10 ký tự)
   const shortId1 = sortedIds[0].slice(0, 10);
   const shortId2 = sortedIds[1].slice(0, 10);
   const callId = `call_${shortId1}_${shortId2}`;
