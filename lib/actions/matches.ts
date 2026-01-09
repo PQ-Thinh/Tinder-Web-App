@@ -84,7 +84,7 @@ export async function getPotentialMatches(): Promise<UserProfile[]> {
 
   if (!user) throw new Error("Not authenticated.");
 
-  // 1. Lấy Preferences và Danh sách đã Like
+  // Lấy Preferences và Danh sách đã Like
   const [prefsResponse, likesResponse] = await Promise.all([
     supabase.from("users").select("preferences").eq("id", user.id).single(),
     supabase.from("likes").select("to_user_id").eq("from_user_id", user.id),
@@ -99,7 +99,7 @@ export async function getPotentialMatches(): Promise<UserProfile[]> {
   const distanceMeters = (userPrefs.distance || 50) * 1000;
   const genderPref = userPrefs.gender_preference || [];
 
-  // 2. GỌI RPC
+  // GỌI RPC
   const { data, error } = await supabase
     .rpc("find_potential_matches", {
       min_age: minAge,
@@ -120,21 +120,18 @@ export async function getPotentialMatches(): Promise<UserProfile[]> {
     throw new Error("Failed to fetch matches");
   }
 
-  // ÉP KIỂU AN TOÀN TẠI ĐÂY
-  // Supabase trả về data dạng mảng object, ta ép nó về đúng cấu trúc RawPotentialMatch
   const rawMatches = data as unknown as RawPotentialMatch[];
 
-  // 3. Map dữ liệu
+  //Map dữ liệu
   return rawMatches.map((match) => {
-    // Bây giờ 'match' đã có kiểu dữ liệu rõ ràng, TypeScript sẽ gợi ý code
     const { latitude, longitude } = parsePostGISLocation(match.location);
 
     return {
-      ...match, // Spread các trường cơ bản (id, full_name...)
+      ...match,
       latitude,
       longitude,
-      hobbies: formatHobbies(match.user_hobbies), // Hàm này đã nhận đúng kiểu RawUserHobby[]
-      preferences: match.preferences as Record<string, unknown>, // Đảm bảo đúng kiểu cho JSONB
+      hobbies: formatHobbies(match.user_hobbies),
+      preferences: match.preferences as Record<string, unknown>,
     };
   });
 }
@@ -148,7 +145,7 @@ export async function likeUser(toUserId: string) {
 
   if (!user) throw new Error("Bạn chưa đăng nhập.");
 
-  // A. Insert vào bảng Likes
+  // Insert vào bảng Likes
   // Trigger trong DB sẽ tự động tạo row trong bảng 'matches' nếu match
   const { error: likeError } = await supabase.from("likes").insert({
     from_user_id: user.id,
@@ -156,14 +153,14 @@ export async function likeUser(toUserId: string) {
   });
 
   if (likeError) {
-    // Check lỗi duplicate key (đã like rồi) để không crash app
+    //Check lỗi duplicate key (đã like rồi) 
     if (likeError.code === "23505") {
       return { success: true, isMatch: false, message: "Already liked" };
     }
     throw new Error("Failed to create like");
   }
 
-  // B. Kiểm tra xem có Match không (Kiểm tra xem người kia đã like mình chưa)
+  // Kiểm tra xem có Match không (Kiểm tra xem người kia đã like mình chưa)
   const { data: reverseLike } = await supabase
     .from("likes")
     .select("*")

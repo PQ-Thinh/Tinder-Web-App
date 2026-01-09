@@ -70,7 +70,7 @@ export async function createOrGetChannel(otherUserId: string) {
     throw new Error("Users are not matched. Cannot create chat channel.");
   }
 
-  // --- [LOGIC TẠO ID MỚI - ĐỒNG BỘ CLIENT & SERVER] ---
+  // --- [LOGIC TẠO ID  - ĐỒNG BỘ CLIENT & SERVER] ---
   // Lấy 20 ký tự đầu của mỗi UUID để ghép lại.
   // UUID có tính duy nhất rất cao ngay từ các ký tự đầu.
   // Tổng độ dài: 6 (match_) + 20 + 1 (_) + 20 = 47 ký tự (< 64 ký tự limit của Stream)

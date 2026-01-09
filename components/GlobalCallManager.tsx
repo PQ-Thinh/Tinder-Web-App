@@ -171,7 +171,7 @@ export default function GlobalCallManager() {
     setShowOutgoingCall(true);
   };
 
-  // 👇 [FIXED] Gửi lệnh hủy robust hơn
+  // Gửi lệnh hủy robust hơn
   const handleCancelOutgoingCall = async () => {
     const channel = window.currentChatChannel;
     if (channel && outgoingCallId) {
