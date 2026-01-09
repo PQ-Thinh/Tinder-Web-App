@@ -207,7 +207,7 @@ export async function getUserMatches(): Promise<UserProfile[]> {
 
   if (!user) throw new Error("Not authenticated.");
 
-  // A. Query bảng Matches với Relation Joins (Tối ưu N+1 query)
+  // Query bảng Matches với Relation Joins (Tối ưu N+1 query)
   // Cần chỉ định rõ foreign key vì 1 bảng users join 2 lần
   const { data: matches, error } = await supabase
     .from("matches")
